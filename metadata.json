@@ -1,0 +1,6 @@
+{
+  "name": "Tawseel Plus Aden",
+  "description": "توصيل بلس عدن - High-end food delivery platform for Aden with dark mode, real-time tracking, and automated delivery fee calculation.",
+  "requestFramePermissions": ["geolocation", "notifications"],
+  "majorCapabilities": ["PWA", "Real-time Database", "Maps Integration"]
+}

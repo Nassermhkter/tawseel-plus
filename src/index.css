@@ -1,0 +1,117 @@
+@import "tailwindcss";
+@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@theme {
+  --color-primary: #ff5a1f;
+  --color-accent: #4ade80;
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border-color);
+  --color-text: var(--text-color);
+  --color-text-muted: var(--text-muted);
+  
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-4xl: 2rem;
+  --radius-5xl: 3rem;
+}
+
+:root {
+  --bg: #fbfbfb;
+  --surface: #ffffff;
+  --text-color: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #f1f5f9;
+  
+  background-color: var(--bg);
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  direction: rtl;
+}
+
+:root.dark {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --text-color: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #1f1f23;
+}
+
+body {
+  @apply antialiased bg-background text-text transition-colors duration-300;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+}
+
+.dark-card {
+  @apply bg-surface border border-border rounded-4xl p-4 shadow-sm transition-all;
+}
+
+.light-shadow {
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary {
+  @apply bg-primary text-white font-bold py-4 px-6 rounded-2xl transition-all active:scale-95 shadow-lg shadow-primary/20 hover:brightness-110;
+}
+
+.btn-secondary {
+  @apply bg-surface border border-border text-text font-medium py-4 px-6 rounded-2xl transition-all active:scale-95 hover:bg-background;
+}
+
+/* Geometric balance search bar */
+.search-input {
+  @apply w-full h-14 bg-surface rounded-2xl flex items-center px-6 gap-3 text-text-muted border border-border focus-within:border-primary/30 transition-all;
+}
+
+.status-badge-open {
+  @apply text-[11px] bg-accent/10 text-accent px-3 py-1 rounded-full font-bold;
+}
+
+.status-badge-closed {
+  @apply text-[11px] bg-red-500/10 text-red-500 px-3 py-1 rounded-full font-bold;
+}
+
+/* Custom shadow for Geometric Balance */
+.shadow-primary-sm {
+  box-shadow: 0 4px 15px -2px rgba(255, 90, 31, 0.2);
+}
+
+.shadow-header {
+  @apply shadow-lg shadow-black/5;
+}
+
+.dark .shadow-header {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+/* Custom Leaflet Styling */
+.leaflet-container {
+  @apply rounded-3xl !z-0 overflow-hidden border border-border;
+  background: var(--surface) !important;
+  width: 100%;
+}
+
+/* Dark mode tiles */
+.dark .leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  @apply !m-4 shadow-xl;
+}
+
+.leaflet-control-zoom-in, .leaflet-control-zoom-out {
+  @apply !bg-surface !text-primary !border-border !rounded-xl !w-10 !h-10 !flex !items-center !justify-center !text-lg !font-bold transition-all hover:!bg-primary/10 !mb-2;
+}
+
+.leaflet-control-attribution {
+  @apply !bg-black/20 !text-[8px] !text-text-muted !px-2 !rounded-tl-lg backdrop-blur-sm;
+}
+

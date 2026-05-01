@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'hadirynasser@gmail.com' ||
+        request.auth.token.email == 'admin@tawseel.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+    }
+
+    // Restaurants
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      
+      match /items/{itemId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Config
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /deliveryConfig/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /bankOptions/{optionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

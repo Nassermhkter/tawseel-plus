@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and authentication data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "phone"]
+    },
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Restaurant details and location",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "district": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "workingHours": {
+          "type": "object",
+          "properties": {
+            "open": { "type": "string" },
+            "close": { "type": "string" }
+          }
+        },
+        "isVerified": { "type": "boolean" },
+        "rating": { "type": "number" }
+      },
+      "required": ["name", "district", "location"]
+    },
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "An item in a restaurant's menu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" }
+      },
+      "required": ["restaurantId", "name", "price"]
+    },
+    "MenuCategory": {
+      "title": "Menu Category",
+      "description": "A group of menu items (e.g., Burgers, Drinks)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A food delivery order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "delivering", "delivered", "cancelled"] },
+        "paymentMethod": { "type": "string" },
+        "location": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DeliveryConfig": {
+      "title": "Delivery Configuration",
+      "description": "Rules for calculating delivery fees",
+      "type": "object",
+      "properties": {
+        "basePrice": { "type": "number" },
+        "perKmRate": { "type": "number" },
+        "maxFee": { "type": "number" }
+      }
+    },
+    "Config": {
+      "title": "General System Configuration",
+      "description": "General settings like whatsapp number and minimum order",
+      "type": "object",
+      "properties": {
+        "minOrder": { "type": "number" },
+        "deliveryFeeBase": { "type": "number" },
+        "deliveryFeePerKm": { "type": "number" },
+        "deliveryFeeMax": { "type": "number" },
+        "whatsappNumber": { "type": "string" }
+      }
+    },
+    "BankOption": {
+      "title": "Bank Option",
+      "description": "Payment options for customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bankName": { "type": "string" },
+        "accountHolder": { "type": "string" },
+        "accountNumber": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "System users" },
+    "restaurants": { "schema": "Restaurant", "description": "Partner restaurants" },
+    "restaurants/{restaurantId}/categories": { "schema": "MenuCategory", "description": "Menu categories for a restaurant" },
+    "restaurants/{restaurantId}/items": { "schema": "MenuItem", "description": "Menu items for a restaurant" },
+    "orders": { "schema": "Order", "description": "Delivery orders" },
+    "config": { "schema": "Config", "description": "General system configuration" },
+    "deliveryConfig": { "schema": "DeliveryConfig", "description": "Global delivery pricing" },
+    "bankOptions": { "schema": "BankOption", "description": "Available payment methods" }
+  }
+}
