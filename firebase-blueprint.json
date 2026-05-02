@@ -102,8 +102,23 @@
             "lng": { "type": "number" }
           }
         },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "driverPhone": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "Driver": {
+      "title": "Driver",
+      "description": "Delivery personnel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "phone"]
     },
     "DeliveryConfig": {
       "title": "Delivery Configuration",
@@ -145,6 +160,7 @@
     "restaurants/{restaurantId}/categories": { "schema": "MenuCategory", "description": "Menu categories for a restaurant" },
     "restaurants/{restaurantId}/items": { "schema": "MenuItem", "description": "Menu items for a restaurant" },
     "orders": { "schema": "Order", "description": "Delivery orders" },
+    "drivers": { "schema": "Driver", "description": "Delivery drivers" },
     "config": { "schema": "Config", "description": "General system configuration" },
     "deliveryConfig": { "schema": "DeliveryConfig", "description": "Global delivery pricing" },
     "bankOptions": { "schema": "BankOption", "description": "Available payment methods" }

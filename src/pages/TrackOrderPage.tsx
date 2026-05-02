@@ -191,11 +191,33 @@ export default function TrackOrderPage() {
           </div>
         </div>
 
-        {/* Action Button */}
-        <button className="w-full btn-secondary flex items-center justify-center gap-2 py-5">
-          <Phone size={20} />
-          <span>اتصال بالسائق</span>
-        </button>
+        {order.driverId && (
+          <div className="bg-surface border border-border rounded-3xl flex items-center justify-between p-5 shadow-sm">
+            <div className="flex gap-4 items-center">
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+                <Bike size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] text-text-muted uppercase tracking-widest leading-none mb-1">السائق المكلف</p>
+                <p className="font-bold text-sm">{order.driverName || 'سائق توصيل'}</p>
+              </div>
+            </div>
+            <a 
+              href={`tel:${order.driverPhone}`}
+              className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 hover:scale-110 active:scale-95 transition-all"
+            >
+              <Phone size={20} />
+            </a>
+          </div>
+        )}
+
+        {/* Action Button if no driver */}
+        {!order.driverId && (
+          <button className="w-full btn-secondary flex items-center justify-center gap-2 py-5 opacity-50 cursor-not-allowed">
+            <Phone size={20} />
+            <span>جاري تعيين سائق...</span>
+          </button>
+        )}
       </div>
     </div>
   );

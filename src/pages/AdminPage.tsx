@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike } from 'lucide-react';
-import { Restaurant, MenuCategory } from '../types';
+import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike, Users, FileText } from 'lucide-react';
+import { Restaurant, MenuCategory, Driver } from '../types';
 import { seedDatabase } from '../lib/seed';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { Link } from 'react-router-dom';
@@ -71,6 +71,14 @@ export default function AdminPage() {
     lng: 44.985
   });
   const [editingRestaurantId, setEditingRestaurantId] = useState<string | null>(null);
+
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [newDriver, setNewDriver] = useState({ name: '', phone: '' });
+  const [bulkMenuText, setBulkMenuText] = useState('');
+  const [bulkPreview, setBulkPreview] = useState<any[]>([]);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [isSearchingMap, setIsSearchingMap] = useState(false);
 
   const [config, setConfig] = useState({
     minOrder: 1000,
@@ -141,6 +149,18 @@ export default function AdminPage() {
   }, [activeTab]);
 
   useEffect(() => {
+    const fetchDrivers = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'drivers'));
+        setDrivers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Driver[]);
+      } catch (err) {
+        console.error('Drivers fetch failed', err);
+      }
+    };
+    if (activeTab === 'drivers' || activeTab === 'orders') fetchDrivers();
+  }, [activeTab]);
+
+  useEffect(() => {
     let isInitialLoad = true;
     const playSound = () => {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -168,6 +188,194 @@ export default function AdminPage() {
       setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
     } catch (err) {
       console.error('Update status failed', err);
+    }
+  };
+
+  const handleAssignDriver = async (orderId: string, driverId: string) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { 
+        driverId,
+        driverName: driver.name,
+        driverPhone: driver.phone
+      });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, driverId, driverName: driver.name, driverPhone: driver.phone } : o));
+      alert('تم تعيين السائق للطلب');
+    } catch (err) {
+      console.error('Assign driver failed', err);
+    }
+  };
+
+  const handleAddDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'drivers'), {
+        name: newDriver.name,
+        phone: newDriver.phone,
+        isActive: true
+      });
+      setNewDriver({ name: '', phone: '' });
+      const snap = await getDocs(collection(db, 'drivers'));
+      setDrivers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Driver[]);
+    } catch (err) {
+      console.error('Add driver failed', err);
+    }
+  };
+
+  const handleDeleteDriver = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'drivers', id));
+      setDrivers(drivers.filter(d => d.id !== id));
+    } catch (err) {
+      console.error('Delete driver failed', err);
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!selectedRestaurantId || !selectedCategoryId || !bulkMenuText) {
+      alert('الرجاء اختيار المطعم والتصنيف وكتابة البيانات');
+      return;
+    }
+
+    setIsBulkUploading(true);
+    try {
+      // Expected format: Name | Price | Description
+      const lines = bulkMenuText.split('\n').filter(l => l.trim().includes('|'));
+      
+      for (const line of lines) {
+        const [name, price, desc] = line.split('|').map(s => s.trim());
+        if (name && price) {
+          await addDoc(collection(db, 'restaurants', selectedRestaurantId, 'items'), {
+            name,
+            description: desc || '',
+            price: Number(price.replace(/[^0-9.]/g, '')),
+            image: "https://picsum.photos/seed/food/400",
+            categoryId: selectedCategoryId,
+            restaurantId: selectedRestaurantId,
+            isAvailable: true
+          });
+        }
+      }
+      
+      setBulkMenuText('');
+      alert(`تم رفع ${lines.length} وجبة بنجاح`);
+      
+      const snap = await getDocs(collection(db, 'restaurants', selectedRestaurantId, 'items'));
+      setMenuItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[]);
+    } catch (err) {
+      console.error('Bulk upload failed', err);
+      alert('حدث خطأ أثناء الرفع الجماعي');
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
+
+  const handleMapSearch = async () => {
+    if (!mapSearchQuery.trim()) return;
+    setIsSearchingMap(true);
+    try {
+      // Removing custom headers and method to keep it as a simple request and avoid preflight issues
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchQuery + ' Aden Yemen')}&addressdetails=1&limit=1&accept-language=ar&email=hadirynasser@gmail.com`
+      );
+      
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        setNewRestaurant(prev => ({
+          ...prev,
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        }));
+      } else {
+        alert('لم يتم العثور على الموقع، حاول كتابة اسم الحي أو الشارع بشكل أوضح (مثلاً: المنصورة، عدن)');
+      }
+    } catch (err) {
+      console.error('Map search failed:', err);
+      alert('فشل البحث في الخريطة. يمكنك تحديد الموقع يدوياً بالنقر على الخريطة.');
+    } finally {
+      setIsSearchingMap(false);
+    }
+  };
+
+  const handleBulkPreview = () => {
+    const lines = bulkMenuText.split('\n').map(l => l.trim()).filter(l => l);
+    const previewItems: any[] = [];
+    let currentCategoryId = selectedCategoryId;
+
+    lines.forEach(line => {
+      // Check if line is a category header (e.g. "Main Dishes:")
+      if (line.endsWith(':')) {
+        const catName = line.slice(0, -1).trim();
+        const foundCat = categories.find(c => c.name === catName);
+        if (foundCat) currentCategoryId = foundCat.id;
+        return;
+      }
+
+      if (line.includes('|')) {
+        const [name, price, desc] = line.split('|').map(s => s.trim());
+        if (name && price) {
+          previewItems.push({
+            name,
+            price: Number(price.replace(/[^0-9.]/g, '')),
+            description: desc || '',
+            categoryId: currentCategoryId,
+            categoryName: categories.find(c => c.id === currentCategoryId)?.name || 'غير محدد'
+          });
+        }
+      } else {
+        // Try to match: Name Price (Optional Description)
+        // Matches "Pizza 5000" or "Pizza 5000 delicious"
+        const match = line.match(/(.+?)\s+(\d+)(?:\s+(.*))?$/);
+        if (match) {
+          const name = match[1].trim();
+          const price = match[2].trim();
+          const desc = match[3] || '';
+          if (name && price) {
+             previewItems.push({
+              name,
+              price: Number(price),
+              description: desc.trim(),
+              categoryId: currentCategoryId,
+              categoryName: categories.find(c => c.id === currentCategoryId)?.name || 'غير محدد'
+            });
+          }
+        }
+      }
+    });
+
+    setBulkPreview(previewItems);
+  };
+
+  const handleConfirmBulkUpload = async () => {
+    if (bulkPreview.length === 0 || !selectedRestaurantId) return;
+
+    setIsBulkUploading(true);
+    try {
+      for (const item of bulkPreview) {
+        await addDoc(collection(db, 'restaurants', selectedRestaurantId, 'items'), {
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          image: "https://picsum.photos/seed/" + item.name + "/400",
+          categoryId: item.categoryId,
+          restaurantId: selectedRestaurantId,
+          isAvailable: true
+        });
+      }
+      
+      setBulkMenuText('');
+      setBulkPreview([]);
+      alert(`تم رفع ${bulkPreview.length} وجبة بنجاح`);
+      
+      const snap = await getDocs(collection(db, 'restaurants', selectedRestaurantId, 'items'));
+      setMenuItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[]);
+    } catch (err) {
+      console.error('Bulk upload failed', err);
+      alert('حدث خطأ أثناء الرفع');
+    } finally {
+      setIsBulkUploading(false);
     }
   };
 
@@ -421,6 +629,12 @@ export default function AdminPage() {
               onClick={() => setActiveTab('orders')} 
             />
             <AdminNavLink 
+              icon={<Users size={20} />} 
+              label="السائقين" 
+              active={activeTab === 'drivers'} 
+              onClick={() => setActiveTab('drivers')} 
+            />
+            <AdminNavLink 
               icon={<Settings size={20} />} 
               label="الإعدادات" 
               active={activeTab === 'config'} 
@@ -531,28 +745,48 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="md:col-span-2 space-y-2">
+                  <div className="md:col-span-2 space-y-2">
                   <div className="flex justify-between items-center px-2">
                     <label className="text-[10px] text-gray-500 uppercase tracking-widest flex items-center gap-1">
                       <MapPin size={10} /> تحديد موقع المطعم على الخريطة
                     </label>
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        if (navigator.geolocation) {
-                          navigator.geolocation.getCurrentPosition(
-                            (pos) => {
-                              setNewRestaurant({...newRestaurant, lat: pos.coords.latitude, lng: pos.coords.longitude});
-                            },
-                            (err) => console.error(err),
-                            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                          );
-                        }
-                      }}
-                      className="text-[10px] text-primary font-bold hover:underline"
-                    >
-                      تحديد موقعي الحالي بدقة
-                    </button>
+                    <div className="flex gap-2 items-center">
+                      <div className="relative">
+                        <input 
+                          type="text"
+                          className="bg-background border border-border px-3 py-1.5 rounded-lg text-[10px] outline-none focus:border-primary w-48"
+                          placeholder="ابحث عن مكان (مثل: كريتر)..." 
+                          value={mapSearchQuery}
+                          onChange={e => setMapSearchQuery(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleMapSearch())}
+                        />
+                        <button 
+                          type="button"
+                          onClick={handleMapSearch}
+                          disabled={isSearchingMap}
+                          className="absolute left-2 top-1.5 text-primary hover:text-primary-dark disabled:opacity-50"
+                        >
+                          {isSearchingMap ? '...' : 'بحث'}
+                        </button>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => {
+                                setNewRestaurant({...newRestaurant, lat: pos.coords.latitude, lng: pos.coords.longitude});
+                              },
+                              (err) => console.error(err),
+                              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                            );
+                          }
+                        }}
+                        className="text-[10px] text-primary font-bold hover:underline"
+                      >
+                        موقعي
+                      </button>
+                    </div>
                   </div>
                   <div className="h-64 rounded-[2rem] overflow-hidden border border-border relative z-0 shadow-inner">
                     <MapContainer center={[newRestaurant.lat, newRestaurant.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
@@ -781,6 +1015,17 @@ export default function AdminPage() {
                           <option value="cancelled">ملغي</option>
                         </select>
                         
+                        <select 
+                          className="bg-background border border-border p-3 rounded-xl text-xs font-bold text-blue-600"
+                          value={order.driverId || ''}
+                          onChange={(e) => handleAssignDriver(order.id, e.target.value)}
+                        >
+                          <option value="">تعيين سائق...</option>
+                          {drivers.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+
                         <button 
                           onClick={() => handleUpdateDriverLocation(order.id)}
                           className="px-4 py-3 bg-primary/10 text-primary rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-primary/20 transition-all font-display"
@@ -1133,6 +1378,129 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* Bulk Upload Section */}
+            <div className="dark-card space-y-4">
+              <div className="flex items-center gap-2 text-primary">
+                <FileText size={18} />
+                <h3 className="font-bold">رفع جماعي للمنتجات</h3>
+              </div>
+              
+              {!bulkPreview.length ? (
+                <>
+                  <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20">
+                    <p className="text-[11px] text-primary font-bold mb-2">تعليمات الرفع:</p>
+                    <ul className="text-[10px] text-text-muted space-y-1 list-disc list-inside">
+                      <li>استخدم التنسيق: <span className="font-mono bg-background px-1 border border-border">الاسم | السعر | الوصف</span></li>
+                      <li>لتغيير الفئة تلقائياً، اكتب اسم الفئة متبوعاً بـ : (مثلاً <span className="font-bold">برجر:</span>)</li>
+                      <li>كل وجبة يجب أن تكون في سطر منفصل.</li>
+                    </ul>
+                  </div>
+                  <textarea
+                    className="w-full bg-background border border-border p-4 rounded-xl text-sm min-h-[150px] font-mono leading-relaxed"
+                    placeholder="برجر دجاج | 2500 | مع البطاطس&#10;شاورما لحم | 1800 | بالخبز العربي"
+                    value={bulkMenuText}
+                    onChange={e => setBulkMenuText(e.target.value)}
+                  />
+                  <button 
+                    onClick={handleBulkPreview}
+                    className="btn-secondary w-full py-4 text-primary font-bold"
+                  >
+                    معاينة البيانات المستخرجة
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-gray-400">معاينة ({bulkPreview.length}) وجبة</h4>
+                    <button onClick={() => setBulkPreview([])} className="text-[10px] text-red-500 underline">تعديل النص</button>
+                  </div>
+                  
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {bulkPreview.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-3 bg-background border border-border rounded-xl">
+                        <div className="text-right">
+                          <p className="text-xs font-bold">{item.name}</p>
+                          <p className="text-[9px] text-primary uppercase">{item.categoryName}</p>
+                        </div>
+                        <p className="text-[10px] font-mono font-bold">{item.price} YER</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button 
+                    onClick={handleConfirmBulkUpload}
+                    disabled={isBulkUploading}
+                    className="btn-primary w-full py-4 disabled:opacity-50 shadow-lg shadow-primary/20"
+                  >
+                    {isBulkUploading ? 'جاري الحفظ في القاعدة...' : 'تأكيد وحفظ الكل'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'drivers' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-black font-display text-text">إدارة السائقين</h2>
+            
+            <div className="dark-card space-y-4">
+              <h3 className="font-bold flex items-center gap-2"><Plus size={18} className="text-primary" /> إضافة سائق جديد</h3>
+              <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">اسم السائق</label>
+                  <input 
+                    className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                    placeholder="الاسم الثلاثي..." 
+                    value={newDriver.name}
+                    onChange={e => setNewDriver({...newDriver, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">رقم الهاتف</label>
+                  <input 
+                    className="w-full bg-background border border-border p-4 rounded-xl text-sm font-mono"
+                    placeholder="77..." 
+                    value={newDriver.phone}
+                    onChange={e => setNewDriver({...newDriver, phone: e.target.value})}
+                    required
+                  />
+                </div>
+                <button className="md:col-span-2 btn-primary py-4 text-sm mt-2 font-bold">إضافة السائق</button>
+              </form>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-bold text-gray-400 text-xs px-2 uppercase tracking-widest">السائقين المسجلين ({drivers.length})</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {drivers.map(driver => (
+                  <div key={driver.id} className="dark-card flex justify-between items-center group">
+                    <div className="flex gap-4 items-center">
+                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{driver.name}</p>
+                        <p className="text-text-muted text-[10px] font-mono">{driver.phone}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteDriver(driver.id)}
+                      className="p-2 text-red-500/50 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+                {drivers.length === 0 && (
+                  <div className="md:col-span-2 lg:col-span-3 py-10 text-center text-text-muted italic text-sm">
+                    لا يوجد سائقين مسجلين حالياً
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </main>

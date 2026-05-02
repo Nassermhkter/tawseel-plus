@@ -35,6 +35,13 @@ export interface MenuItem {
   image: string;
 }
 
+export interface Driver {
+  id: string;
+  name: string;
+  phone: string;
+  isActive: boolean;
+}
+
 export interface Order {
   id: string;
   customerId: string;
@@ -46,6 +53,9 @@ export interface Order {
   paymentMethod: string;
   location: { lat: number; lng: number; address: string };
   createdAt: any;
+  driverId?: string;
+  driverName?: string;
+  driverPhone?: string;
 }
 
 export interface CartItem {
