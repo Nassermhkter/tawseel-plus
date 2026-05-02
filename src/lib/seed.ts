@@ -87,7 +87,7 @@ export async function seedDatabase() {
     deliveryFeeBase: 1500,
     deliveryFeePerKm: 300,
     deliveryFeeMax: 5000,
-    whatsappNumber: '967733000000'
+    whatsappNumber: '+967784880551'
   });
 
   console.log('Database seeded successfully!');

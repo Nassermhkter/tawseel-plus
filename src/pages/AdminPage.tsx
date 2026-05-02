@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike } from 'lucide-react';
 import { Restaurant, MenuCategory } from '../types';
 import { seedDatabase } from '../lib/seed';
@@ -248,13 +248,42 @@ export default function AdminPage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) { // 1MB limit for firestore doc size safety
-        alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 1 ميجابايت');
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 2 ميجابايت');
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        callback(reader.result as string);
+        const img = new Image();
+        img.src = reader.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Max dimension for compression
+          const MAX_SIDE = 1000;
+          if (width > height) {
+            if (width > MAX_SIDE) {
+              height *= MAX_SIDE / width;
+              width = MAX_SIDE;
+            }
+          } else {
+            if (height > MAX_SIDE) {
+              width *= MAX_SIDE / height;
+              height = MAX_SIDE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Compress to JPEG with 0.7 quality to stay under Firestore doc limit
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          callback(compressedBase64);
+        };
       };
       reader.readAsDataURL(file);
     }

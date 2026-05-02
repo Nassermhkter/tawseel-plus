@@ -118,27 +118,27 @@ export default function CartPage() {
       return;
     }
 
-    const itemsText = items.map(i => `• ${i.name} (x${i.quantity}) - ${formatCurrency(i.price * i.quantity)}`).join('\n');
+    const itemsText = items.map(i => `  • ${i.name} (x${i.quantity})`).join('\n');
     const locationLink = `https://www.google.com/maps?q=${selectedLocation.lat},${selectedLocation.lng}`;
     
-    let message = `*📦 طلب جديد من توصيل بلس - عدن*\n\n` +
-      `*👤 العميل:* ${user.name}\n` +
-      `*📞 الهاتف:* ${user.phone}\n\n`;
+    const message = `🛵 *طلب جديد — توصيل بلس*
+──────────────────
+👤 *العميل:* ${user.name}
+📞 *الهاتف:* ${user.phone}
+📍 *العنوان:* ${user.address}
 
-    if (restaurant) {
-      message += `*🏪 المطعم:* ${restaurant.name}\n\n`;
-    }
+──────────────────
 
-    message += `*🍱 الأصناف:*\n${itemsText}\n\n` +
-      `*💰 الحساب:*\n` +
-      `- المجموع: ${formatCurrency(total)}\n` +
-      `- رسوم التوصيل: ${formatCurrency(deliveryFee)}\n` +
-      `- *الإجمالي:* ${formatCurrency(total + deliveryFee)}\n\n` +
-      `*💳 طريقة الدفع:* نقداً عند الاستلام (COD)\n\n` +
-      `*📍 موقع التوصيل:*\n` +
-      `${locationLink}\n` +
-      `*العنوان:* ${user.address}\n\n` +
-      `شكراً لاستخدامكم توصيل بلس!`;
+🏪 *مطعم ${restaurant?.name || 'غير محدد'}*
+${itemsText}
+
+──────────────────
+💰 المجموع: ${formatCurrency(total)}
+🛵 التوصيل: ${formatCurrency(deliveryFee)}
+✅ *الإجمالي: ${formatCurrency(total + deliveryFee)}*
+──────────────────
+📍 *موقع العميل:* ${locationLink}
+⏰ ${new Date().toLocaleString('ar-YE')}`;
 
     try {
       const orderRef = await addDoc(collection(db, 'orders'), {
