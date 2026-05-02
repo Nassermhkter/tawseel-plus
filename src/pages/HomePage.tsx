@@ -87,7 +87,7 @@ export default function HomePage() {
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
             <UtensilsCrossed size={32} />
           </div>
-          <h2 className="text-xl font-black font-display">المنصة تحت الصيانة</h2>
+          <h2 className="text-xl font-black font-display">{platformConfig?.platformName || 'توصيل بلس'} تحت الصيانة</h2>
           <p className="text-sm font-medium opacity-90">نحن نعمل على تحسين تجربتكم، سنعود قريباً!</p>
         </div>
       )}
@@ -143,19 +143,27 @@ export default function HomePage() {
 
       {/* Rolling Food Marquee - Continuous Loop */}
       {(platformConfig?.marqueeImages?.length > 0 || FOOD_IMAGES.length > 0) && (
-        <div className="relative overflow-hidden py-2 -mx-4">
-          <div className="flex w-fit animate-marquee">
-            <div className="flex gap-4 px-4 whitespace-nowrap">
+        <div className="relative overflow-hidden py-4 -mx-4 bg-surface/30 border-y border-border/10">
+          <div className="flex w-max animate-marquee">
+            <div className="flex gap-4 px-2 whitespace-nowrap">
               {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
-                <div key={`m1-${i}`} className="flex-shrink-0 w-40 h-28 rounded-2xl overflow-hidden border border-border shadow-md">
+                <div key={`m1-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
                   <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
               ))}
             </div>
             {/* Duplicate for seamless loop */}
-            <div className="flex gap-4 px-4 whitespace-nowrap" aria-hidden="true">
+            <div className="flex gap-4 px-2 whitespace-nowrap" aria-hidden="true">
               {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
-                <div key={`m2-${i}`} className="flex-shrink-0 w-40 h-28 rounded-2xl overflow-hidden border border-border shadow-md">
+                <div key={`m2-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
+                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </div>
+              ))}
+            </div>
+            {/* Triple for very small sets */}
+            <div className="flex gap-4 px-2 whitespace-nowrap" aria-hidden="true">
+              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
+                <div key={`m3-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
                   <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
               ))}

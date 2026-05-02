@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { doc, updateDoc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, MapPin, Phone, LogOut, ChevronLeft, Package, UserCircle, Edit2, Check, X, Clock } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
@@ -48,6 +48,14 @@ export default function ProfilePage() {
     lat: 12.825,
     lng: 44.985
   });
+  const [platformConfig, setPlatformConfig] = useState<any>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
+      if (snap.exists()) setPlatformConfig(snap.data());
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -203,9 +211,31 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2 flex items-center gap-1">
-                <MapPin size={10} /> تحديد الموقع الدقيق
-              </label>
+              <div className="flex justify-between items-center px-2">
+                <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2 flex items-center gap-1">
+                  <MapPin size={10} /> تحديد الموقع الدقيق
+                </label>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                          setEditData({...editData, lat: pos.coords.latitude, lng: pos.coords.longitude});
+                        },
+                        (err) => {
+                          console.error('Geolocation error:', err);
+                          alert('تعذر تحديد الموقع. يرجى التأكد من تفعيل خدمة الموقع.');
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                      );
+                    }
+                  }}
+                  className="text-[10px] text-primary font-bold hover:underline"
+                >
+                  تحديد موقعي الآن
+                </button>
+              </div>
               <div className="h-48 rounded-xl overflow-hidden border border-border relative z-0">
                 <MapContainer center={[editData.lat, editData.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -287,6 +317,35 @@ export default function ProfilePage() {
         <LogOut size={20} />
         تسجيل الخروج
       </button>
+
+      {/* Footer Info - Only on Profile Page */}
+      <footer className="mt-12 pt-8 border-t border-border/50 text-center space-y-6">
+        <div className="flex flex-col items-center gap-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black font-display text-primary">{platformConfig?.platformName || 'توصيل بلس'}</h3>
+            <p className="text-[10px] text-text-muted max-w-[200px] mx-auto leading-relaxed">
+              خدمة توصيل الطلبات الأسرع والأكثر أماناً في عدن.
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex flex-col items-center gap-4">
+          <div className="text-[10px] font-bold text-text-muted flex items-center gap-2">
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-tighter">الاصدار 1.0</span>
+            <span className="text-border">|</span>
+            <span>جميع الحقوق محفوظة &copy; {new Date().getFullYear()}</span>
+          </div>
+          
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-[10px] font-bold text-text-muted">تصميم وتطوير:</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-primary font-display">ناصر مختار</span>
+              <span className="text-border">|</span>
+              <a href="tel:775082146" className="text-xs font-mono font-bold text-text hover:text-primary transition-colors">775082146</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -77,7 +77,8 @@ export default function AdminPage() {
     deliveryFeeBase: 1500,
     deliveryFeePerKm: 300,
     deliveryFeeMax: 5000,
-    whatsappNumber: '967784880551',
+    whatsappNumber: '+967784880551',
+    platformName: 'توصيل بلس',
     platformLogo: '',
     openingTime: '08:00',
     closingTime: '23:00',
@@ -140,15 +141,23 @@ export default function AdminPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const snap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
-        setOrders(snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) })));
-      } catch (err) {
-        console.error('Orders fetch failed', err);
-      }
+    let isInitialLoad = true;
+    const playSound = () => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Autoplay blocked:', e));
     };
-    if (activeTab === 'orders') fetchOrders();
+
+    if (activeTab !== 'orders') return;
+
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const ordersData = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      setOrders(ordersData);
+    }, (err) => {
+      console.error('Orders snapshot failed', err);
+    });
+
+    return () => unsub();
   }, [activeTab]);
 
   if (!isAdmin) return <div className="p-12 text-center text-red-500 font-bold">غير مصرح لك بدخول هذه الصفحة</div>;
@@ -501,13 +510,19 @@ export default function AdminPage() {
                     <button 
                       type="button"
                       onClick={() => {
-                        navigator.geolocation.getCurrentPosition((pos) => {
-                          setNewRestaurant({...newRestaurant, lat: pos.coords.latitude, lng: pos.coords.longitude});
-                        });
+                        if (navigator.geolocation) {
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                              setNewRestaurant({...newRestaurant, lat: pos.coords.latitude, lng: pos.coords.longitude});
+                            },
+                            (err) => console.error(err),
+                            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                          );
+                        }
                       }}
                       className="text-[10px] text-primary font-bold hover:underline"
                     >
-                      تحديد موقعي الحالي
+                      تحديد موقعي الحالي بدقة
                     </button>
                   </div>
                   <div className="h-64 rounded-[2rem] overflow-hidden border border-border relative z-0 shadow-inner">
@@ -766,6 +781,15 @@ export default function AdminPage() {
               <h3 className="font-bold flex items-center gap-2 text-primary tracking-tight">إعدادات النظام</h3>
               <form onSubmit={handleUpdateConfig} className="space-y-4">
                 <div className="space-y-1">
+                  <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">اسم المنصة</label>
+                  <input 
+                    className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                    placeholder="توصيل بلس..." 
+                    value={config.platformName || 'توصيل بلس'}
+                    onChange={e => setConfig({...config, platformName: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
                   <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">رقم الواتساب الخاص بالطلبات</label>
                   <input 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm font-mono"
@@ -900,8 +924,17 @@ export default function AdminPage() {
                         <input type="file" className="hidden" accept="image/*" onChange={e => handleImageUpload(e, (b) => setConfig({...config, platformLogo: b}))} />
                       </label>
                       {config.platformLogo && (
-                        <div className="w-14 h-14 bg-white rounded-xl overflow-hidden border border-border flex items-center justify-center shrink-0 shadow-sm p-1">
-                          <img src={config.platformLogo} alt="Preview" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        <div className="relative group">
+                          <div className="w-14 h-14 bg-white rounded-xl overflow-hidden border border-border flex items-center justify-center shrink-0 shadow-sm p-1">
+                            <img src={config.platformLogo} alt="Preview" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setConfig({...config, platformLogo: ''})}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Plus size={12} className="rotate-45" />
+                          </button>
                         </div>
                       )}
                     </div>

@@ -45,7 +45,7 @@ export default function CartPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(user?.location || null);
 
-  const [whatsappNumber, setWhatsappNumber] = useState('967784880551');
+  const [whatsappNumber, setWhatsappNumber] = useState('+967784880551');
   const [feeConfig, setFeeConfig] = useState<{ base?: number, perKm?: number, max?: number }>({});
 
   useEffect(() => {
@@ -281,6 +281,29 @@ export default function CartPage() {
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <LocationMarker position={selectedLocation || {lat: 12.825, lng: 44.985}} setPosition={setSelectedLocation} />
             </MapContainer>
+            
+            {/* High Accuracy Auto Location Button */}
+            <button 
+              onClick={() => {
+                if (navigator.geolocation) {
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      setSelectedLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    },
+                    (err) => {
+                      console.error('Geolocation error:', err);
+                      alert('تعذر تحديد الموقع بدقة. يرجى التأكد من تفعيل الموقع في جهازك.');
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                  );
+                }
+              }}
+              className="absolute bottom-6 right-6 z-[1000] bg-primary text-white p-4 rounded-full shadow-2xl flex items-center gap-2 font-bold text-xs ring-4 ring-primary/20"
+            >
+              <MapPin size={20} />
+              تحديد موقعي التلقائي
+            </button>
+
             <div className="absolute top-4 right-4 z-[1000] bg-surface p-3 rounded-2xl shadow-xl border border-border">
               <p className="text-[10px] font-bold text-primary mb-1">اضغط على الخريطة لتحديد موقعك</p>
             </div>

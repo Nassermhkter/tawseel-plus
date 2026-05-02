@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -39,13 +39,24 @@ export default function TrackOrderPage() {
   const navigate = useNavigate();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const prevStatus = useRef<string | null>(null);
 
   useEffect(() => {
     if (!orderId) return;
 
+    const playSound = () => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+      audio.play().catch(e => console.log('Autoplay blocked:', e));
+    };
+
     const unsub = onSnapshot(doc(db, 'orders', orderId), (docSnap) => {
       if (docSnap.exists()) {
-        setOrder({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (prevStatus.current && prevStatus.current !== data.status) {
+          playSound();
+        }
+        prevStatus.current = data.status;
+        setOrder({ id: docSnap.id, ...data });
       } else {
         console.error('Order not found');
       }

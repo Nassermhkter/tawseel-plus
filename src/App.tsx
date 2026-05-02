@@ -16,7 +16,67 @@ import { useAuth } from './context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from './lib/utils';
 import { db } from './lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, orderBy, limit } from 'firebase/firestore';
+
+const GlobalNotificationListener = () => {
+  const { user } = useAuth();
+  const lastStatuses = React.useRef<Record<string, string>>({});
+  const isAdminInitialLoad = React.useRef(true);
+
+  React.useEffect(() => {
+    if (!user) return;
+
+    const playStatusSound = () => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+      audio.play().catch(e => console.log('Autoplay blocked:', e));
+    };
+
+    const playNewOrderSound = () => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Autoplay blocked:', e));
+    };
+
+    // Client listener for status updates
+    let unsubClient: () => void = () => {};
+    if (user.role !== 'admin') {
+      const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
+      unsubClient = onSnapshot(q, (snap) => {
+        snap.docChanges().forEach(change => {
+          const data = change.doc.data();
+          if (change.type === 'modified') {
+            if (lastStatuses.current[change.doc.id] && lastStatuses.current[change.doc.id] !== data.status) {
+              playStatusSound();
+            }
+          }
+          lastStatuses.current[change.doc.id] = data.status;
+        });
+      });
+    }
+
+    // Admin listener for new orders
+    let unsubAdmin: () => void = () => {};
+    if (user?.role === 'admin') {
+      const qAdmin = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(1));
+      unsubAdmin = onSnapshot(qAdmin, (snap) => {
+        snap.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            if (!isAdminInitialLoad.current) {
+              playNewOrderSound();
+            }
+          }
+        });
+        isAdminInitialLoad.current = false;
+      });
+    }
+
+    return () => {
+      unsubClient();
+      unsubAdmin();
+    };
+  }, [user]);
+
+  return null;
+};
 
 const Navigation = () => {
   const { count, total } = useCart();
@@ -64,42 +124,33 @@ const NavLink = ({ to, icon, label, active }: { to: string; icon: React.ReactNod
   </Link>
 );
 
-const Header = () => {
+const Header = ({ logo, name }: { logo: string, name: string }) => {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [platformLogo, setPlatformLogo] = React.useState('');
-
-  React.useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.platformLogo) setPlatformLogo(data.platformLogo);
-      }
-    });
-    return () => unsub();
-  }, []);
   
   return (
-    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md px-6 py-5 flex items-center justify-between border-b border-border/50">
+    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md px-6 py-4 flex items-center justify-between border-b border-border/50">
       <Link to="/" className="flex items-center gap-3">
-        {platformLogo && (
-          <img src={platformLogo} alt="Logo" className="h-8 w-8 object-contain rounded-md" referrerPolicy="no-referrer" />
+        {logo && (
+          <img src={logo} alt="Logo" className="h-10 w-auto max-w-[120px] object-contain drop-shadow-sm" referrerPolicy="no-referrer" />
         )}
-        <h1 className="text-2xl font-black tracking-tight text-primary font-display whitespace-nowrap">توصيل بلس</h1>
-        <span className="text-sm text-text-muted font-normal font-sans">عدن</span>
+        <div className="flex flex-col -space-y-1">
+          <h1 className="text-xl font-black tracking-tight text-primary font-display whitespace-nowrap">{name}</h1>
+          <span className="text-[10px] text-text-muted font-bold font-sans tracking-wide">عدن</span>
+        </div>
       </Link>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button 
           onClick={toggleTheme}
-          className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center text-text-muted transition-all active:scale-90"
+          className="w-9 h-9 rounded-[14px] bg-surface border border-border flex items-center justify-center text-text-muted transition-all active:scale-90"
         >
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <button className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center text-text-muted">
-          <Bell size={20} />
+        <button className="w-9 h-9 rounded-[14px] bg-surface border border-border flex items-center justify-center text-text-muted">
+          <Bell size={18} />
         </button>
         {user?.role === 'admin' && (
-          <Link to="/admin" className="w-10 h-10 rounded-xl bg-primary shadow-lg shadow-primary/20 flex items-center justify-center text-white text-[10px] font-bold">ADM</Link>
+          <Link to="/admin" className="h-9 px-3 rounded-[14px] bg-primary shadow-lg shadow-primary/20 flex items-center justify-center text-white text-[10px] font-black">مدير</Link>
         )}
       </div>
     </header>
@@ -107,13 +158,28 @@ const Header = () => {
 }
 
 export default function App() {
+  const [platformLogo, setPlatformLogo] = React.useState('');
+  const [platformName, setPlatformName] = React.useState('توصيل بلس');
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.platformLogo) setPlatformLogo(data.platformLogo);
+        if (data.platformName) setPlatformName(data.platformName);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>
+        <GlobalNotificationListener />
         <CartProvider>
           <BrowserRouter>
             <div className="min-h-screen pb-32 bg-background transition-colors duration-300">
-              <Header />
+              <Header logo={platformLogo} name={platformName} />
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/restaurant/:id" element={<RestaurantPage />} />
@@ -124,33 +190,6 @@ export default function App() {
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/admin/*" element={<AdminPage />} />
               </Routes>
-              <footer className="mt-8 px-6 py-12 border-t border-border/50 bg-surface/30">
-                <div className="max-w-7xl mx-auto space-y-6 text-center">
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-black font-display text-primary">توصيل بلس</h3>
-                    <p className="text-xs text-text-muted leading-relaxed">
-                      خدمة توصيل الطلبات الأسرع والأكثر أماناً في عدن. نصلك أينما كنت بأعلى معايير الجودة.
-                    </p>
-                  </div>
-                  
-                  <div className="flex flex-col items-center gap-4 pt-6 border-t border-border/20">
-                    <div className="text-[10px] font-bold text-text-muted flex items-center gap-2">
-                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-tighter">الاصدار 1.0</span>
-                      <span className="text-border">|</span>
-                      <span>جميع الحقوق محفوظة &copy; {new Date().getFullYear()}</span>
-                    </div>
-                    
-                    <div className="flex flex-col items-center gap-1">
-                      <p className="text-[10px] font-bold text-text-muted">تصميم وتطوير:</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-primary font-display">ناصر مختار</span>
-                        <span className="text-border">|</span>
-                        <a href="tel:775082146" className="text-xs font-mono font-bold text-text hover:text-primary transition-colors">775082146</a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </footer>
               <Navigation />
             </div>
           </BrowserRouter>
