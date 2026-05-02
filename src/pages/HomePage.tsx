@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, doc, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { Restaurant } from '../types';
-import { MapPin, Star, Clock, ChevronDown, UtensilsCrossed, Search, Heart, Bell, ShoppingBag } from 'lucide-react';
+import { MapPin, Star, Clock, ChevronDown, UtensilsCrossed, Search, Heart, Bell, ShoppingBag, Package, ChevronRight, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
+import { formatCurrency } from '../lib/utils';
 
 const DISTRICTS = ['الكل', 'صيرة (كريتر)', 'المعلا', 'التواهي', 'خورمكسر', 'المنصورة', 'الشيخ عثمان', 'دار سعد', 'البريقة'];
 
@@ -104,6 +105,28 @@ export default function HomePage() {
     const timer = setInterval(() => setCurrentSlide(s => (s + 1) % slides.length), 5000);
     return () => clearInterval(timer);
   }, [slides.length]);
+
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) {
+      setRecentOrders([]);
+      return;
+    }
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(2)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setRecentOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      console.error('Recent orders fetch failed', err);
+    });
+    return () => unsub();
+  }, [user]);
+
   return (
     <div className="px-4 space-y-6 pb-12 overflow-x-hidden">
       {/* Notifications Header Area removed for global Header integration */}
@@ -213,6 +236,65 @@ export default function HomePage() {
             {isActuallyClosed && (
               <span className="text-[8px] text-red-500/60 font-bold">يرجى العودة في أوقات الدوام</span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Activity/Orders Section */}
+      {recentOrders.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-black text-text uppercase tracking-widest flex items-center gap-2">
+              <ShoppingBag size={14} className="text-primary" />
+              طلباتي الأخيرة
+            </h3>
+            <Link to="/profile" className="text-[10px] font-bold text-primary hover:underline">عرض الكل</Link>
+          </div>
+          <div className="grid gap-3">
+            {recentOrders.map(order => (
+              <Link 
+                key={order.id} 
+                to={`/track-order/${order.id}`}
+                className="group relative bg-surface border border-border rounded-3xl p-4 flex items-center justify-between hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden"
+              >
+                {order.status === 'on_the_way' && (
+                  <div className="absolute top-0 right-0 w-1 h-full bg-primary animate-pulse" />
+                )}
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    order.status === 'delivered' ? 'bg-green-500/10 text-green-500' :
+                    order.status === 'cancelled' ? 'bg-red-500/10 text-red-500' :
+                    'bg-primary/10 text-primary'
+                  }`}>
+                    {order.status === 'delivered' ? <Check size={18} /> : <Package size={18} />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-xs">طلب {order.restaurantName || 'خارجي'}</h4>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${
+                        order.status === 'delivered' ? 'bg-green-500/10 text-green-600' :
+                        order.status === 'on_the_way' ? 'bg-primary/10 text-primary animate-pulse' :
+                        'bg-background border border-border text-text-muted'
+                      }`}>
+                        {order.status === 'pending' ? 'بانتظار التأكيد' :
+                         order.status === 'preparing' ? 'جاري التحضير' :
+                         order.status === 'on_the_way' ? 'في الطريق' :
+                         order.status === 'delivered' ? 'تم الوصول' : 'ملغي'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-text-muted mt-0.5 font-mono">
+                      {new Date(order.createdAt).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="text-xs font-black text-text">{formatCurrency(order.total + order.deliveryFee)}</p>
+                  </div>
+                  <ChevronRight size={14} className="text-text-muted group-hover:translate-x-[-2px] transition-transform" />
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       )}

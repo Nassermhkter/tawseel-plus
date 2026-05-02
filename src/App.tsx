@@ -52,10 +52,14 @@ const GlobalNotificationListener = () => {
 
       // If browser permission is granted, show system notification
       if (Notification.permission === 'granted') {
-        new Notification('توصيل بلس', { body: message, icon: '/logo.png' });
+        try {
+          new Notification('توصيل بلس', { body: message, icon: '/logo.png' });
+        } catch (e) {
+          console.error('Error showing notification:', e);
+        }
       }
 
-      setTimeout(() => setNotification(curr => curr?.id === id ? null : curr), 4000);
+      setTimeout(() => setNotification(curr => curr?.id === id ? null : curr), 2000);
     };
 
     // Request notification permission on mount if signed in
