@@ -77,7 +77,7 @@
     },
     "Order": {
       "title": "Order",
-      "description": "A food delivery order",
+      "description": "A food delivery order with tracking info",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -86,9 +86,22 @@
         "items": { "type": "array" },
         "total": { "type": "number" },
         "deliveryFee": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "delivering", "delivered", "cancelled"] },
+        "status": { "type": "string", "enum": ["pending", "preparing", "on_the_way", "delivered", "cancelled"] },
         "paymentMethod": { "type": "string" },
-        "location": { "type": "object" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "driverLocation": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },

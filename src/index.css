@@ -19,6 +19,15 @@
   --radius-5xl: 3rem;
 }
 
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
 :root {
   --bg: #fbfbfb;
   --surface: #ffffff;

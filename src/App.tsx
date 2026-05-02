@@ -8,12 +8,15 @@ import HomePage from './pages/HomePage';
 import RestaurantPage from './pages/RestaurantPage';
 import CartPage from './pages/CartPage';
 import SearchPage from './pages/SearchPage';
+import TrackOrderPage from './pages/TrackOrderPage';
 import ProfilePage from './pages/ProfilePage';
 import AuthPage from './pages/AuthPage';
 import AdminPage from './pages/AdminPage';
 import { useAuth } from './context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from './lib/utils';
+import { db } from './lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 const Navigation = () => {
   const { count, total } = useCart();
@@ -64,16 +67,27 @@ const NavLink = ({ to, icon, label, active }: { to: string; icon: React.ReactNod
 const Header = () => {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [platformLogo, setPlatformLogo] = React.useState('');
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.platformLogo) setPlatformLogo(data.platformLogo);
+      }
+    });
+    return () => unsub();
+  }, []);
   
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md px-6 py-5 flex items-center justify-between border-b border-border/50">
-      <div>
-        <h1 className="text-2xl font-black tracking-tight text-primary font-display">توصيل بلس <span className="text-sm text-text-muted font-normal mr-1 font-sans">عدن</span></h1>
-        <div className="flex items-center gap-1 text-[11px] text-text-muted mt-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-          مباشر الآن
-        </div>
-      </div>
+      <Link to="/" className="flex items-center gap-3">
+        {platformLogo && (
+          <img src={platformLogo} alt="Logo" className="h-8 w-8 object-contain rounded-md" referrerPolicy="no-referrer" />
+        )}
+        <h1 className="text-2xl font-black tracking-tight text-primary font-display whitespace-nowrap">توصيل بلس</h1>
+        <span className="text-sm text-text-muted font-normal font-sans">عدن</span>
+      </Link>
       <div className="flex items-center gap-3">
         <button 
           onClick={toggleTheme}
@@ -104,11 +118,39 @@ export default function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/restaurant/:id" element={<RestaurantPage />} />
                 <Route path="/cart" element={<CartPage />} />
+                <Route path="/track-order/:orderId" element={<TrackOrderPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/admin/*" element={<AdminPage />} />
               </Routes>
+              <footer className="mt-8 px-6 py-12 border-t border-border/50 bg-surface/30">
+                <div className="max-w-7xl mx-auto space-y-6 text-center">
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-black font-display text-primary">توصيل بلس</h3>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      خدمة توصيل الطلبات الأسرع والأكثر أماناً في عدن. نصلك أينما كنت بأعلى معايير الجودة.
+                    </p>
+                  </div>
+                  
+                  <div className="flex flex-col items-center gap-4 pt-6 border-t border-border/20">
+                    <div className="text-[10px] font-bold text-text-muted flex items-center gap-2">
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-tighter">الاصدار 1.0</span>
+                      <span className="text-border">|</span>
+                      <span>جميع الحقوق محفوظة &copy; {new Date().getFullYear()}</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-[10px] font-bold text-text-muted">تصميم وتطوير:</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-primary font-display">ناصر مختار</span>
+                        <span className="text-border">|</span>
+                        <a href="tel:775082146" className="text-xs font-mono font-bold text-text hover:text-primary transition-colors">775082146</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </footer>
               <Navigation />
             </div>
           </BrowserRouter>

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, addDoc, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle } from 'lucide-react';
+import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc } from 'firebase/firestore';
+import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike } from 'lucide-react';
 import { Restaurant, MenuCategory } from '../types';
 import { seedDatabase } from '../lib/seed';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { Link } from 'react-router-dom';
 import L from 'leaflet';
 
 // Fix for Leaflet marker icons
@@ -42,6 +43,7 @@ export default function AdminPage() {
   const { user, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('restaurants');
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [selectedRestaurantId, setSelectedRestaurantId] = useState('');
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
@@ -75,7 +77,12 @@ export default function AdminPage() {
     deliveryFeeBase: 1500,
     deliveryFeePerKm: 300,
     deliveryFeeMax: 5000,
-    whatsappNumber: '967733000000'
+    whatsappNumber: '967784880551',
+    platformLogo: '',
+    openingTime: '08:00',
+    closingTime: '23:00',
+    marqueeImages: [] as string[],
+    platformStatus: 'open' as 'open' | 'busy' | 'maintenance' | 'closed'
   });
 
   useEffect(() => {
@@ -123,7 +130,7 @@ export default function AdminPage() {
       try {
         const snap = await getDocs(collection(db, 'config'));
         if (!snap.empty) {
-          setConfig(snap.docs[0].data() as any);
+          setConfig(prev => ({ ...prev, ...snap.docs[0].data() }));
         }
       } catch (err) {
         console.error('Config fetch failed', err);
@@ -132,7 +139,47 @@ export default function AdminPage() {
     if (activeTab === 'config') fetchConfig();
   }, [activeTab]);
 
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
+        setOrders(snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) })));
+      } catch (err) {
+        console.error('Orders fetch failed', err);
+      }
+    };
+    if (activeTab === 'orders') fetchOrders();
+  }, [activeTab]);
+
   if (!isAdmin) return <div className="p-12 text-center text-red-500 font-bold">غير مصرح لك بدخول هذه الصفحة</div>;
+
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
+    } catch (err) {
+      console.error('Update status failed', err);
+    }
+  };
+
+  const handleUpdateDriverLocation = async (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    // Simulate movement towards specific location
+    const lat = order.location.lat + (Math.random() - 0.5) * 0.005;
+    const lng = order.location.lng + (Math.random() - 0.5) * 0.005;
+
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { 
+        driverLocation: { lat, lng },
+        status: 'on_the_way'
+      });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, driverLocation: { lat, lng }, status: 'on_the_way' } : o));
+    } catch (err) {
+      console.error('Update driver location failed', err);
+    }
+  };
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +233,21 @@ export default function AdminPage() {
       setMenuItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[]);
     } catch (err) {
       handleFirestoreError(err, editingMenuItemId ? OperationType.UPDATE : OperationType.CREATE, editingMenuItemId ? `restaurants/${selectedRestaurantId}/items/${editingMenuItemId}` : `restaurants/${selectedRestaurantId}/items`);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 1024 * 1024) { // 1MB limit for firestore doc size safety
+        alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 1 ميجابايت');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        callback(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -315,6 +377,12 @@ export default function AdminPage() {
               onClick={() => setActiveTab('categories')} 
             />
             <AdminNavLink 
+              icon={<Package size={20} />} 
+              label="الطلبات" 
+              active={activeTab === 'orders'} 
+              onClick={() => setActiveTab('orders')} 
+            />
+            <AdminNavLink 
               icon={<Settings size={20} />} 
               label="الإعدادات" 
               active={activeTab === 'config'} 
@@ -374,7 +442,7 @@ export default function AdminPage() {
                   <input 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all"
                     placeholder="مطعم حضرموت..." 
-                    value={newRestaurant.name}
+                    value={newRestaurant.name || ''}
                     onChange={e => setNewRestaurant({...newRestaurant, name: e.target.value})}
                     required
                   />
@@ -383,28 +451,34 @@ export default function AdminPage() {
                   <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">المديرية</label>
                   <select 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all appearance-none"
-                    value={newRestaurant.district}
+                    value={newRestaurant.district || 'المنصورة'}
                     onChange={e => setNewRestaurant({...newRestaurant, district: e.target.value})}
                   >
                     {['صيرة (كريتر)', 'المعلا', 'التواهي', 'خورمكسر', 'المنصورة', 'الشيخ عثمان', 'دار سعد', 'البريقة'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">رابط الشعار</label>
-                  <input 
-                    className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all"
-                    placeholder="https://..." 
-                    value={newRestaurant.logo}
-                    onChange={e => setNewRestaurant({...newRestaurant, logo: e.target.value})}
-                  />
-                </div>
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">شعار المطعم</label>
+                    <div className="flex gap-4">
+                      <input 
+                        className="flex-1 bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all font-mono"
+                        placeholder="https://..." 
+                        value={newRestaurant.logo || ''}
+                        onChange={e => setNewRestaurant({...newRestaurant, logo: e.target.value})}
+                      />
+                      <label className="bg-surface border border-border p-4 rounded-xl text-xs font-bold text-primary cursor-pointer hover:bg-primary/5 transition-colors shrink-0 flex items-center gap-2">
+                        <span>رفع صورة</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={e => handleImageUpload(e, (b) => setNewRestaurant({...newRestaurant, logo: b}))} />
+                      </label>
+                    </div>
+                  </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">وقت الفتح</label>
                   <input 
                     type="time"
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all"
-                    value={newRestaurant.open}
+                    value={newRestaurant.open || '08:00'}
                     onChange={e => setNewRestaurant({...newRestaurant, open: e.target.value})}
                   />
                 </div>
@@ -414,7 +488,7 @@ export default function AdminPage() {
                   <input 
                     type="time"
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all"
-                    value={newRestaurant.close}
+                    value={newRestaurant.close || '23:00'}
                     onChange={e => setNewRestaurant({...newRestaurant, close: e.target.value})}
                   />
                 </div>
@@ -565,14 +639,14 @@ export default function AdminPage() {
                 <input 
                   className="w-full bg-background border border-border p-4 rounded-xl text-sm"
                   placeholder="اسم التصنيف (مثل: مشاوي، برجر...)" 
-                  value={newCategory.name}
+                  value={newCategory.name || ''}
                   onChange={e => setNewCategory({...newCategory, name: e.target.value})}
                   required
                 />
                 <input 
                   className="w-full bg-background border border-border p-4 rounded-xl text-sm"
                   placeholder="وصف التصنيف (اختياري)" 
-                  value={newCategory.description}
+                  value={newCategory.description || ''}
                   onChange={e => setNewCategory({...newCategory, description: e.target.value})}
                 />
                 <button className="w-full btn-primary py-4 text-sm mt-2">إضافة التصنيف</button>
@@ -620,6 +694,72 @@ export default function AdminPage() {
           </div>
         )}
 
+        {activeTab === 'orders' && (
+          <div className="space-y-6">
+            <h2 className="text-3xl font-black font-display text-text">إدارة الطلبات</h2>
+            <div className="grid gap-4">
+              {orders.length === 0 ? (
+                <div className="dark-card text-center py-20 text-text-muted">لا توجد طلبات لعرضها</div>
+              ) : (
+                orders.map((order) => (
+                  <div key={order.id} className="bg-surface border border-border rounded-4xl p-6 shadow-sm">
+                    <div className="flex flex-col md:flex-row justify-between gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <span className="font-black text-lg font-display">طلب #{order.id.slice(-6).toUpperCase()}</span>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            order.status === 'delivered' ? 'bg-accent/10 text-accent' :
+                            order.status === 'on_the_way' ? 'bg-blue-500/10 text-blue-500' :
+                            'bg-primary/10 text-primary'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <p className="text-text-muted text-sm flex items-center gap-2">
+                          <Clock size={14} />
+                          {new Date(order.createdAt).toLocaleString('ar-YE')}
+                        </p>
+                        <p className="text-text font-medium text-sm">
+                          {order.items?.map((i: any) => `${i.name} (x${i.quantity})`).join(' • ')}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <select 
+                          className="bg-background border border-border p-3 rounded-xl text-xs font-bold"
+                          value={order.status}
+                          onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                        >
+                          <option value="pending">قيد الانتظار</option>
+                          <option value="preparing">جاري التجهيز</option>
+                          <option value="on_the_way">في الطريق</option>
+                          <option value="delivered">تم التوصيل</option>
+                          <option value="cancelled">ملغي</option>
+                        </select>
+                        
+                        <button 
+                          onClick={() => handleUpdateDriverLocation(order.id)}
+                          className="px-4 py-3 bg-primary/10 text-primary rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-primary/20 transition-all font-display"
+                        >
+                          <Bike size={16} />
+                          محاكاة موقع السائق
+                        </button>
+
+                        <Link 
+                          to={`/track-order/${order.id}`}
+                          className="p-3 bg-surface border border-border rounded-xl text-text-muted hover:text-primary transition-all"
+                        >
+                          <MapPin size={18} />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'config' && (
           <div className="space-y-6">
             <div className="dark-card space-y-4">
@@ -630,7 +770,7 @@ export default function AdminPage() {
                   <input 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm font-mono"
                     placeholder="967733..." 
-                    value={config.whatsappNumber}
+                    value={config.whatsappNumber || ''}
                     onChange={e => setConfig({...config, whatsappNumber: e.target.value})}
                   />
                 </div>
@@ -640,7 +780,7 @@ export default function AdminPage() {
                     <input 
                       type="number"
                       className="w-full bg-background border border-border p-4 rounded-xl text-sm"
-                      value={config.deliveryFeeBase}
+                      value={config.deliveryFeeBase || 0}
                       onChange={e => setConfig({...config, deliveryFeeBase: Number(e.target.value)})}
                     />
                   </div>
@@ -649,7 +789,7 @@ export default function AdminPage() {
                     <input 
                       type="number"
                       className="w-full bg-background border border-border p-4 rounded-xl text-sm"
-                      value={config.deliveryFeePerKm}
+                      value={config.deliveryFeePerKm || 0}
                       onChange={e => setConfig({...config, deliveryFeePerKm: Number(e.target.value)})}
                     />
                   </div>
@@ -658,7 +798,7 @@ export default function AdminPage() {
                     <input 
                       type="number"
                       className="w-full bg-background border border-border p-4 rounded-xl text-sm"
-                      value={config.deliveryFeeMax}
+                      value={config.deliveryFeeMax || 0}
                       onChange={e => setConfig({...config, deliveryFeeMax: Number(e.target.value)})}
                     />
                   </div>
@@ -667,9 +807,104 @@ export default function AdminPage() {
                     <input 
                       type="number"
                       className="w-full bg-background border border-border p-4 rounded-xl text-sm"
-                      value={config.minOrder}
+                      value={config.minOrder || 0}
                       onChange={e => setConfig({...config, minOrder: Number(e.target.value)})}
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت فتح المنصة</label>
+                    <input 
+                      type="time"
+                      className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                      value={config.openingTime || '08:00'}
+                      onChange={e => setConfig({...config, openingTime: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت إغلاق المنصة</label>
+                    <input 
+                      type="time"
+                      className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                      value={config.closingTime || '23:00'}
+                      onChange={e => setConfig({...config, closingTime: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2 space-y-2 pt-4">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">حالة المنصة</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {[
+                        { id: 'open', label: 'مفتوح', color: 'bg-accent' },
+                        { id: 'busy', label: 'مزدحم', color: 'bg-yellow-500' },
+                        { id: 'maintenance', label: 'صيانة', color: 'bg-orange-500' },
+                        { id: 'closed', label: 'مغلق', color: 'bg-red-500' }
+                      ].map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setConfig({...config, platformStatus: s.id as any})}
+                          className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${
+                            config.platformStatus === s.id ? 'border-primary bg-primary/10' : 'border-border bg-background'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${s.color}`} />
+                          <span className="text-xs font-bold">{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-4 pt-4 border-t border-border">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">صور الشريط المتحرك (الرولنج)</label>
+                      <label className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-[10px] font-bold cursor-pointer hover:bg-primary/20 transition-all">
+                        إضافة صورة جديدة
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*" 
+                          onChange={e => handleImageUpload(e, (b) => setConfig({...config, marqueeImages: [...(config.marqueeImages || []), b]}))} 
+                        />
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {config.marqueeImages?.map((img, idx) => (
+                        <div key={idx} className="relative group w-24 h-16 rounded-xl overflow-hidden border border-border shadow-sm">
+                          <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <button 
+                            type="button"
+                            onClick={() => setConfig({...config, marqueeImages: config.marqueeImages.filter((_, i) => i !== idx)})}
+                            className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      {(!config.marqueeImages || config.marqueeImages.length === 0) && (
+                        <p className="text-[10px] text-text-muted italic py-4">لم يتم إضافة صور رولنج بعد</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">شعار المنصة</label>
+                    <div className="flex gap-4">
+                      <input 
+                        type="text"
+                        className="flex-1 bg-background border border-border p-4 rounded-xl text-sm font-mono"
+                        placeholder="رابط الشعار أو ارفع من جهازك"
+                        value={config.platformLogo || ''}
+                        onChange={e => setConfig({...config, platformLogo: e.target.value})}
+                      />
+                      <label className="bg-surface border border-border p-4 rounded-xl text-xs font-bold text-primary cursor-pointer hover:bg-primary/5 transition-colors shrink-0 flex items-center gap-2">
+                        <span>رفع صورة</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={e => handleImageUpload(e, (b) => setConfig({...config, platformLogo: b}))} />
+                      </label>
+                      {config.platformLogo && (
+                        <div className="w-14 h-14 bg-white rounded-xl overflow-hidden border border-border flex items-center justify-center shrink-0 shadow-sm p-1">
+                          <img src={config.platformLogo} alt="Preview" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button className="w-full btn-primary py-4 text-sm">حفظ الإعدادات</button>
@@ -731,7 +966,7 @@ export default function AdminPage() {
                   <input 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm"
                     placeholder="مثل: برجر لحم دبل..." 
-                    value={newMenuItem.name}
+                    value={newMenuItem.name || ''}
                     onChange={e => setNewMenuItem({...newMenuItem, name: e.target.value})}
                     required
                   />
@@ -741,7 +976,7 @@ export default function AdminPage() {
                   <input 
                     type="number"
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm"
-                    value={newMenuItem.price}
+                    value={newMenuItem.price || ''}
                     onChange={e => setNewMenuItem({...newMenuItem, price: e.target.value})}
                     required
                   />
@@ -751,9 +986,24 @@ export default function AdminPage() {
                   <input 
                     className="w-full bg-background border border-border p-4 rounded-xl text-sm"
                     placeholder="مكونات الوجبة..." 
-                    value={newMenuItem.description}
+                    value={newMenuItem.description || ''}
                     onChange={e => setNewMenuItem({...newMenuItem, description: e.target.value})}
                   />
+                </div>
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">صورة الوجبة</label>
+                  <div className="flex gap-4">
+                    <input 
+                      className="flex-1 bg-background border border-border p-4 rounded-xl text-sm font-mono"
+                      placeholder="رابط الصورة أو ارفع من جهازك" 
+                      value={newMenuItem.image || ''}
+                      onChange={e => setNewMenuItem({...newMenuItem, image: e.target.value})}
+                    />
+                    <label className="bg-surface border border-border p-4 rounded-xl text-xs font-bold text-primary cursor-pointer hover:bg-primary/5 transition-colors shrink-0 flex items-center gap-2">
+                      <span>رفع صورة</span>
+                      <input type="file" className="hidden" accept="image/*" onChange={e => handleImageUpload(e, (b) => setNewMenuItem({...newMenuItem, image: b}))} />
+                    </label>
+                  </div>
                 </div>
                 <button className="md:col-span-2 btn-primary py-4 text-sm mt-2">
                   {editingMenuItemId ? 'تحديث الوجبة' : 'إضافة الوجبة'}

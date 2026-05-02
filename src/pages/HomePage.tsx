@@ -1,19 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, onSnapshot } from 'firebase/firestore';
 import { Restaurant } from '../types';
-import { MapPin, Star, Clock, ChevronDown } from 'lucide-react';
+import { MapPin, Star, Clock, ChevronDown, UtensilsCrossed } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 
 const DISTRICTS = ['الكل', 'صيرة (كريتر)', 'المعلا', 'التواهي', 'خورمكسر', 'المنصورة', 'الشيخ عثمان', 'دار سعد', 'البريقة'];
 
+const FOOD_IMAGES = [
+  "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1563379091339-03b21ef4a4f8?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?q=80&w=200&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=200&auto=format&fit=crop"
+];
+
 export default function HomePage() {
   const [selectedDistrict, setSelectedDistrict] = useState(DISTRICTS[0]);
   const [showDistricts, setShowDistricts] = useState(false);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [platformConfig, setPlatformConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
+      if (snap.exists()) setPlatformConfig(snap.data());
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -54,7 +73,6 @@ export default function HomePage() {
     const closeTime = closeH * 60 + closeM;
     
     if (closeTime < openTime) {
-      // Handles overnight closing times (e.g., 8:00 AM - 2:00 AM)
       return currentTime < openTime && currentTime >= closeTime;
     }
     
@@ -62,7 +80,90 @@ export default function HomePage() {
   };
 
   return (
-    <div className="px-4 space-y-6">
+    <div className="px-4 space-y-6 pb-12">
+      {/* Maintenance Mode Overlay */}
+      {platformConfig?.platformStatus === 'maintenance' && (
+        <div className="bg-orange-500 text-white p-6 rounded-4xl flex flex-col items-center justify-center text-center gap-3 shadow-xl animate-pulse">
+          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+            <UtensilsCrossed size={32} />
+          </div>
+          <h2 className="text-xl font-black font-display">المنصة تحت الصيانة</h2>
+          <p className="text-sm font-medium opacity-90">نحن نعمل على تحسين تجربتكم، سنعود قريباً!</p>
+        </div>
+      )}
+
+      {/* Platform Working Hours Badge */}
+      {platformConfig && platformConfig.platformStatus !== 'maintenance' && (
+        <div className={`border rounded-3xl p-4 flex items-center justify-between shadow-sm ${
+          platformConfig.platformStatus === 'busy' ? 'bg-yellow-500/5 border-yellow-500/20' : 
+          platformConfig.platformStatus === 'closed' ? 'bg-red-500/5 border-red-500/20' :
+          'bg-primary/5 border-primary/10'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+              platformConfig.platformStatus === 'busy' ? 'bg-yellow-500/10 text-yellow-600' :
+              platformConfig.platformStatus === 'closed' ? 'bg-red-500/10 text-red-600' :
+              'bg-primary/10 text-primary'
+            }`}>
+              <Clock size={20} />
+            </div>
+            <div>
+              <h4 className={`text-xs font-black font-display ${
+                platformConfig.platformStatus === 'busy' ? 'text-yellow-600' :
+                platformConfig.platformStatus === 'closed' ? 'text-red-600' :
+                'text-primary'
+              }`}>
+                {platformConfig.platformStatus === 'busy' ? 'الطلب الآن متاح (ضغط عالي)' : 
+                 platformConfig.platformStatus === 'closed' ? 'نعتذر، المنصة مغلقة حالياً' :
+                 'ساعات عمل المنصة'}
+              </h4>
+              <p className="text-[10px] text-text-muted font-bold">
+                من {platformConfig.openingTime} صباحاً حتى {platformConfig.closingTime} مساءً
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full animate-pulse ${
+              platformConfig.platformStatus === 'busy' ? 'bg-yellow-500' :
+              platformConfig.platformStatus === 'closed' ? 'bg-red-500' :
+              'bg-accent'
+            }`} />
+            <span className={`text-[10px] font-black uppercase tracking-tighter ${
+              platformConfig.platformStatus === 'busy' ? 'text-yellow-600' :
+              platformConfig.platformStatus === 'closed' ? 'text-red-600' :
+              'text-accent'
+            }`}>
+              {platformConfig.platformStatus === 'busy' ? 'مزدحم' : 
+               platformConfig.platformStatus === 'closed' ? 'مغلق' :
+               'جاهزون لخدمتك'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Rolling Food Marquee - Continuous Loop */}
+      {(platformConfig?.marqueeImages?.length > 0 || FOOD_IMAGES.length > 0) && (
+        <div className="relative overflow-hidden py-2 -mx-4">
+          <div className="flex w-fit animate-marquee">
+            <div className="flex gap-4 px-4 whitespace-nowrap">
+              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
+                <div key={`m1-${i}`} className="flex-shrink-0 w-40 h-28 rounded-2xl overflow-hidden border border-border shadow-md">
+                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </div>
+              ))}
+            </div>
+            {/* Duplicate for seamless loop */}
+            <div className="flex gap-4 px-4 whitespace-nowrap" aria-hidden="true">
+              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
+                <div key={`m2-${i}`} className="flex-shrink-0 w-40 h-28 rounded-2xl overflow-hidden border border-border shadow-md">
+                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* District Selector */}
       <div className="relative">
         <button 

@@ -267,7 +267,7 @@ const Input = ({ icon, type = "text", placeholder, value, onChange }: any) => (
       type={type}
       placeholder={placeholder}
       className="w-full bg-background border border-border rounded-xl py-3 pr-11 pl-4 text-sm focus:border-primary outline-none transition-all"
-      value={value}
+      value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       required
     />
