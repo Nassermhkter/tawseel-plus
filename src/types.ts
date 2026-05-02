@@ -6,6 +6,7 @@ export interface User {
   address?: string;
   location?: { lat: number; lng: number };
   role: 'customer' | 'admin';
+  favorites?: string[];
 }
 
 export interface Restaurant {

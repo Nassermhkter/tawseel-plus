@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Restaurant, MenuItem } from '../types';
 import { Search, Utensils, Store, ChevronRight } from 'lucide-react';
@@ -11,6 +11,14 @@ export default function SearchPage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [platformConfig, setPlatformConfig] = useState<any>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
+      if (snap.exists()) setPlatformConfig(snap.data());
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (searchTerm.length < 2) {
@@ -51,6 +59,10 @@ export default function SearchPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
+      
+      {searchTerm && (
+        <div className="h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent my-2" />
+      )}
 
       <div className="space-y-6">
         {loading && <div className="text-center py-10 opacity-50">جاري البحث...</div>}
@@ -64,18 +76,31 @@ export default function SearchPage() {
             <h3 className="font-bold text-gray-400 text-xs uppercase tracking-widest flex items-center gap-2">
                <Store size={14} /> المطاعم
             </h3>
-            {restaurants.map(r => (
-              <Link key={r.id} to={`/restaurant/${r.id}`} className="dark-card flex justify-between items-center group">
-                <div className="flex gap-3 items-center">
-                  <img src={r.logo} className="w-12 h-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
-                  <div>
-                    <p className="font-bold">{r.name}</p>
-                    <p className="text-[10px] text-gray-500">{r.district}</p>
+            {restaurants.map(r => {
+              const hasCustomLogo = r.logo && !r.logo.includes('picsum.photos');
+              return (
+                <Link key={r.id} to={`/restaurant/${r.id}`} className="dark-card flex justify-between items-center group">
+                  <div className="flex gap-3 items-center">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-primary/5 border border-border/50 flex items-center justify-center shrink-0">
+                      {!hasCustomLogo && platformConfig?.platformLogo ? (
+                        <img 
+                          src={platformConfig.platformLogo}
+                          alt="Fallback"
+                          className="w-full h-full object-contain p-2 opacity-20 filter grayscale"
+                        />
+                      ) : (
+                        <img src={r.logo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold">{r.name}</p>
+                      <p className="text-[10px] text-gray-500">{r.district}</p>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight size={18} className="text-gray-600 group-hover:text-primary transition-colors" />
-              </Link>
-            ))}
+                  <ChevronRight size={18} className="text-gray-600 group-hover:text-primary transition-colors" />
+                </Link>
+              );
+            })}
           </div>
         )}
 

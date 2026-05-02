@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike, Users, FileText } from 'lucide-react';
+import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike, Users, FileText, Search } from 'lucide-react';
 import { Restaurant, MenuCategory, Driver } from '../types';
 import { seedDatabase } from '../lib/seed';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
@@ -31,7 +31,9 @@ function LocationMarker({ position, setPosition }: { position: [number, number],
   });
 
   useEffect(() => {
-    map.flyTo(position, map.getZoom());
+    map.flyTo(position, 16, {
+      duration: 1.5
+    });
   }, [position, map]);
 
   return position === null ? null : (
@@ -90,9 +92,11 @@ export default function AdminPage() {
     platformLogo: '',
     openingTime: '08:00',
     closingTime: '23:00',
-    marqueeImages: [] as string[],
+    carouselImages: [] as { title: string, subtitle: string, image: string }[],
     platformStatus: 'open' as 'open' | 'busy' | 'maintenance' | 'closed'
   });
+
+  const [newSlide, setNewSlide] = useState({ title: '', subtitle: '', image: '' });
 
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -118,7 +122,7 @@ export default function AdminPage() {
         handleFirestoreError(err, OperationType.LIST, `restaurants/${selectedRestaurantId}/categories`);
       }
     };
-    if (activeTab === 'categories') fetchCategories();
+    if (activeTab === 'categories' || activeTab === 'menu') fetchCategories();
   }, [activeTab, selectedRestaurantId]);
 
   useEffect(() => {
@@ -275,13 +279,23 @@ export default function AdminPage() {
     if (!mapSearchQuery.trim()) return;
     setIsSearchingMap(true);
     try {
-      // Removing custom headers and method to keep it as a simple request and avoid preflight issues
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 10000);
+      
+      // Optimize query: remove redundant words if already present, ensuring Aden remains key
+      const cleanBase = mapSearchQuery.replace(/(عدن|اليمن|Aden|Yemen)/gi, "").trim();
+      const finalQuery = `${cleanBase}${cleanBase ? "," : ""} Aden, Yemen`;
+      
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchQuery + ' Aden Yemen')}&addressdetails=1&limit=1&accept-language=ar&email=hadirynasser@gmail.com`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(finalQuery)}&addressdetails=1&limit=3&accept-language=ar`,
+        { signal: controller.signal }
       );
+      
+      clearTimeout(id);
       
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
+      
       if (data && data.length > 0) {
         setNewRestaurant(prev => ({
           ...prev,
@@ -289,11 +303,15 @@ export default function AdminPage() {
           lng: parseFloat(data[0].lon)
         }));
       } else {
-        alert('لم يتم العثور على الموقع، حاول كتابة اسم الحي أو الشارع بشكل أوضح (مثلاً: المنصورة، عدن)');
+        alert('لم يتم العثور على الموقع في عدن. جرب كتابة اسم الحي أو معلم مشهور (مثلاً: جولة الغزل والنسيج)');
       }
     } catch (err) {
       console.error('Map search failed:', err);
-      alert('فشل البحث في الخريطة. يمكنك تحديد الموقع يدوياً بالنقر على الخريطة.');
+      if (err instanceof Error && err.name === 'AbortError') {
+        alert('استغرق البحث وقتاً طويلاً. يرجى التحقق من اتصال الإنترنت.');
+      } else {
+        alert('فشل البحث في الخريطة. يمكنك تحديد الموقع يدوياً بالنقر على الخريطة مباشرة.');
+      }
     } finally {
       setIsSearchingMap(false);
     }
@@ -377,6 +395,17 @@ export default function AdminPage() {
     } finally {
       setIsBulkUploading(false);
     }
+  };
+
+  const parseCoordinatesFromUrl = (url: string) => {
+    // Regex to match lat,lng in various formats
+    const matches = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || 
+                    url.match(/q=(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+                    url.match(/query=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (matches && matches.length >= 3) {
+      return { lat: parseFloat(matches[1]), lng: parseFloat(matches[2]) };
+    }
+    return null;
   };
 
   const handleUpdateDriverLocation = async (orderId: string) => {
@@ -750,24 +779,43 @@ export default function AdminPage() {
                     <label className="text-[10px] text-gray-500 uppercase tracking-widest flex items-center gap-1">
                       <MapPin size={10} /> تحديد موقع المطعم على الخريطة
                     </label>
-                    <div className="flex gap-2 items-center">
-                      <div className="relative">
-                        <input 
-                          type="text"
-                          className="bg-background border border-border px-3 py-1.5 rounded-lg text-[10px] outline-none focus:border-primary w-48"
-                          placeholder="ابحث عن مكان (مثل: كريتر)..." 
-                          value={mapSearchQuery}
-                          onChange={e => setMapSearchQuery(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleMapSearch())}
-                        />
+                    <div className="flex flex-col gap-3 mt-1">
+                      <div className="flex gap-2">
+                        <div className="relative flex-1 group">
+                          <input 
+                            type="text"
+                            className="w-full bg-background border border-border px-3 py-2 pr-8 rounded-xl text-xs outline-none focus:border-primary transition-all shadow-sm"
+                            placeholder="ابحث عن مكان (مثل: كريتر)..." 
+                            value={mapSearchQuery}
+                            onChange={e => setMapSearchQuery(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleMapSearch())}
+                          />
+                          <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
+                        </div>
                         <button 
                           type="button"
                           onClick={handleMapSearch}
                           disabled={isSearchingMap}
-                          className="absolute left-2 top-1.5 text-primary hover:text-primary-dark disabled:opacity-50"
+                          className="bg-primary text-black px-4 py-2 rounded-xl font-bold text-xs hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                         >
                           {isSearchingMap ? '...' : 'بحث'}
                         </button>
+                      </div>
+
+                      <div className="relative group">
+                        <input 
+                          type="text"
+                          className="w-full bg-background border border-border px-3 py-2 pr-8 rounded-xl text-[10px] outline-none focus:border-primary transition-all shadow-sm italic"
+                          placeholder="أو الصق رابط جوجل ماب لاستخراج الإحداثيات..." 
+                          onChange={e => {
+                            const coords = parseCoordinatesFromUrl(e.target.value);
+                            if (coords) {
+                              setNewRestaurant({...newRestaurant, ...coords});
+                              alert('تم استخراج الإحداثيات بنجاح!');
+                            }
+                          }}
+                        />
+                        <MapPin size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       </div>
                       <button 
                         type="button"
@@ -1110,24 +1158,44 @@ export default function AdminPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت فتح المنصة</label>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت فتح المنصة (صباحاً)</label>
                     <input 
                       type="time"
-                      className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                      className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all font-mono"
                       value={config.openingTime || '08:00'}
                       onChange={e => setConfig({...config, openingTime: e.target.value})}
                     />
+                    <p className="text-[9px] text-gray-500 mr-2 mt-1 italic">مثال: 08:00 صباحاً</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت إغلاق المنصة</label>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">وقت إغلاق المنصة (مثلاً 03:00 فجراً)</label>
                     <input 
                       type="time"
-                      className="w-full bg-background border border-border p-4 rounded-xl text-sm"
+                      className="w-full bg-background border border-border p-4 rounded-xl text-sm outline-none focus:border-primary/50 transition-all font-mono"
                       value={config.closingTime || '23:00'}
                       onChange={e => setConfig({...config, closingTime: e.target.value})}
                     />
+                    <p className="text-[9px] text-gray-500 mr-2 mt-1 italic">ملاحظة: إذا كان الوقت فجراً (مثل 03:00)، سيتم احتسابه كإغلاق في اليوم التالي.</p>
                   </div>
                   
+                  <div className="md:col-span-2 p-4 bg-primary/5 rounded-2xl border border-primary/20 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        config.platformStatus === 'closed' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
+                      }`}>
+                         <Clock size={24} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold">معاينة حالة المنصة الحالية:</p>
+                        <p className="text-[10px] text-text-muted">بناءً على التوقيت والوضع المختار</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-xl">
+                      <div className={`w-2.5 h-2.5 rounded-full ${config.platformStatus === 'closed' ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`} />
+                      <span className="text-sm font-bold">{config.platformStatus === 'open' ? 'مفتوح (تشغيل طبيعي)' : config.platformStatus === 'busy' ? 'تنبيه ضغط' : 'مغلق'}</span>
+                    </div>
+                  </div>
+
                   <div className="md:col-span-2 space-y-2 pt-4">
                     <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">حالة المنصة</label>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1153,33 +1221,116 @@ export default function AdminPage() {
                   </div>
 
                   <div className="md:col-span-2 space-y-4 pt-4 border-t border-border">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[10px] text-gray-400 uppercase tracking-widest mr-2">صور الشريط المتحرك (الرولنج)</label>
-                      <label className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-[10px] font-bold cursor-pointer hover:bg-primary/20 transition-all">
-                        إضافة صورة جديدة
-                        <input 
-                          type="file" 
-                          className="hidden" 
-                          accept="image/*" 
-                          onChange={e => handleImageUpload(e, (b) => setConfig({...config, marqueeImages: [...(config.marqueeImages || []), b]}))} 
-                        />
-                      </label>
+                    <div className="flex justify-between items-center px-1">
+                      <div>
+                        <label className="text-[10px] text-gray-400 uppercase tracking-widest">إدارة متزلج الصور (Carousel)</label>
+                        <p className="text-[8px] text-text-muted">أضف شرائح عرض في مقدمة الصفحة الرئيسية لضمان عرض متناسق وجذاب</p>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (!newSlide.image) {
+                            alert('يرجى اختيار صورة أولاً');
+                            return;
+                          }
+                          const title = newSlide.title || "عرض جديد";
+                          const subtitle = newSlide.subtitle || "اكتشف أفضل الخيارات";
+                          setConfig({...config, carouselImages: [...(config.carouselImages || []), { ...newSlide, title, subtitle }]});
+                          setNewSlide({ title: '', subtitle: '', image: '' });
+                        }}
+                        className="bg-primary text-black px-5 py-2.5 rounded-2xl text-[10px] font-black hover:brightness-110 active:scale-95 shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
+                      >
+                        <Plus size={14} />
+                        <span>إضافة الشريحة للقائمة</span>
+                      </button>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                      {config.marqueeImages?.map((img, idx) => (
-                        <div key={idx} className="relative group w-24 h-16 rounded-xl overflow-hidden border border-border shadow-sm">
-                          <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-background border border-border rounded-3xl shadow-inner">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-gray-500 uppercase mr-1 font-bold">العنوان الرئيسي للجذب</label>
+                          <input 
+                            className="w-full bg-surface border border-border p-4 rounded-xl text-xs focus:border-primary transition-all"
+                            placeholder="مثلاً: وجبات عائلية عملاقة..." 
+                            value={newSlide.title}
+                            onChange={e => setNewSlide({...newSlide, title: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-gray-500 uppercase mr-1 font-bold">العنوان الفرعي (الوصف)</label>
+                          <input 
+                            className="w-full bg-surface border border-border p-4 rounded-xl text-xs focus:border-primary transition-all"
+                            placeholder="مثلاً: خصم خاص يصل لـ 50٪ لفترة محدودة..." 
+                            value={newSlide.subtitle}
+                            onChange={e => setNewSlide({...newSlide, subtitle: e.target.value})}
+                          />
+                        </div>
+                        <div className="flex gap-3">
+                          <div className="flex-1 space-y-1">
+                            <label className="text-[9px] text-gray-500 uppercase mr-1 font-bold">رابط الصورة</label>
+                            <input 
+                              className="w-full bg-surface border border-border p-4 rounded-xl text-[10px] font-mono focus:border-primary transition-all"
+                              placeholder="https://..." 
+                              value={newSlide.image}
+                              onChange={e => setNewSlide({...newSlide, image: e.target.value})}
+                            />
+                          </div>
+                          <label className="mt-5 bg-primary/10 text-primary border border-primary/20 p-4 rounded-xl text-[10px] font-black cursor-pointer hover:bg-primary/20 transition-all shrink-0 flex items-center gap-1">
+                            <Plus size={14} />
+                            <span>رفع</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*" 
+                              onChange={e => handleImageUpload(e, (b) => setNewSlide({...newSlide, image: b}))} 
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Side Preview */}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[9px] text-gray-500 uppercase mr-1 font-bold">معاينة الشريحة القادمة</label>
+                        <div className="relative h-full min-h-[140px] rounded-2xl overflow-hidden border border-border bg-surface group">
+                          {newSlide.image ? (
+                            <>
+                              <img src={newSlide.image} className="w-full h-full object-cover" alt="Preview" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4">
+                                <h4 className="text-white font-black text-sm">{newSlide.title || 'العنوان يظهر هنا'}</h4>
+                                <p className="text-white/70 text-[10px]">{newSlide.subtitle || 'الوصف يظهر هنا'}</p>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-2">
+                              <LayoutGrid size={32} strokeWidth={1} className="opacity-20" />
+                              <span className="text-[10px]">بانتظار اختيار الصورة...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-6">
+                      {config.carouselImages?.map((slide, idx) => (
+                        <div key={idx} className="relative group rounded-2xl overflow-hidden border border-border bg-surface flex h-24">
+                          <div className="w-24 shrink-0 h-full">
+                            <img src={slide.image} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
+                            <p className="font-bold text-xs truncate">{slide.title}</p>
+                            <p className="text-[10px] text-text-muted truncate">{slide.subtitle}</p>
+                          </div>
                           <button 
                             type="button"
-                            onClick={() => setConfig({...config, marqueeImages: config.marqueeImages.filter((_, i) => i !== idx)})}
-                            className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                            onClick={() => setConfig({...config, carouselImages: config.carouselImages.filter((_, i) => i !== idx)})}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all hover:bg-red-500 hover:text-white"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       ))}
-                      {(!config.marqueeImages || config.marqueeImages.length === 0) && (
-                        <p className="text-[10px] text-text-muted italic py-4">لم يتم إضافة صور رولنج بعد</p>
+                      {(!config.carouselImages || config.carouselImages.length === 0) && (
+                        <p className="md:col-span-2 text-[10px] text-text-muted italic py-4 text-center bg-background border border-dashed border-border rounded-2xl">لا توجد شرائح عرض في Carousel حالياً</p>
                       )}
                     </div>
                   </div>

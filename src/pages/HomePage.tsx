@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, doc, onSnapshot } from 'firebase/firestore';
 import { Restaurant } from '../types';
-import { MapPin, Star, Clock, ChevronDown, UtensilsCrossed } from 'lucide-react';
-import { motion } from 'motion/react';
+import { MapPin, Star, Clock, ChevronDown, UtensilsCrossed, Search, Heart, Bell, ShoppingBag } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
 
 const DISTRICTS = ['الكل', 'صيرة (كريتر)', 'المعلا', 'التواهي', 'خورمكسر', 'المنصورة', 'الشيخ عثمان', 'دار سعد', 'البريقة'];
 
@@ -26,6 +27,9 @@ export default function HomePage() {
   const [platformConfig, setPlatformConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const { toggleFavorite, isFavorite, user } = useAuth();
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'general'), (snap) => {
@@ -55,6 +59,12 @@ export default function HomePage() {
     fetchRestaurants();
   }, [selectedDistrict]);
 
+  const filteredRestaurants = restaurants.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTab = activeTab === 'Favorites' ? isFavorite(r.id) : true;
+    return matchesSearch && matchesTab;
+  });
+
   const tabs = [
     { id: 'All', label: 'الكل' },
     { id: 'Nearest', label: 'الأقرب' },
@@ -62,25 +72,46 @@ export default function HomePage() {
     { id: 'Favorites', label: 'المفضلة' }
   ];
 
-  const isClosed = (hours: { open: string, close: string }) => {
+  const checkIsClosed = (hours: { open: string, close: string }) => {
+    if (!hours) return false;
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
     
-    const [openH, openM] = hours.open.split(':').map(Number);
-    const [closeH, closeM] = hours.close.split(':').map(Number);
+    const [openH, openM] = (hours.open || '08:00').split(':').map(Number);
+    const [closeH, closeM] = (hours.close || '23:00').split(':').map(Number);
     
     const openTime = openH * 60 + openM;
-    const closeTime = closeH * 60 + closeM;
-    
+    let closeTime = closeH * 60 + closeM;
+
     if (closeTime < openTime) {
-      return currentTime < openTime && currentTime >= closeTime;
+      return !(currentTime >= openTime || currentTime < closeTime);
     }
-    
     return currentTime < openTime || currentTime >= closeTime;
   };
 
+  const platformClosedByTime = platformConfig ? checkIsClosed({ open: platformConfig.openingTime || '10:00', close: platformConfig.closingTime || '23:00' }) : false;
+  const isActuallyClosed = platformConfig?.platformStatus === 'closed' || platformConfig?.platformStatus === 'maintenance' || platformClosedByTime;
+
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const slides = platformConfig?.carouselImages || [
+    { title: 'أفضل الوجبات', subtitle: 'توصيل سريع لباب بيتك بلمشة زر', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1000' },
+    { title: 'عروض حصرية', subtitle: 'خصومات تصل إلى 50٪ على مطاعم مختارة', image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=1000' },
+    { title: 'خدمة 24 ساعة', subtitle: 'نحن معك دائماً في أي وقت ومن أي مكان', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1000' }
+  ];
+
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const timer = setInterval(() => setCurrentSlide(s => (s + 1) % slides.length), 5000);
+    return () => clearInterval(timer);
+  }, [slides.length]);
   return (
-    <div className="px-4 space-y-6 pb-12">
+    <div className="px-4 space-y-6 pb-12 overflow-x-hidden">
+      {/* Notifications Header Area removed for global Header integration */}
+      <div className="flex items-center justify-between mt-2">
+        <h2 className="text-xl font-black font-display text-text">اكتشف المطاعم</h2>
+      </div>
+
+
       {/* Maintenance Mode Overlay */}
       {platformConfig?.platformStatus === 'maintenance' && (
         <div className="bg-orange-500 text-white p-6 rounded-4xl flex flex-col items-center justify-center text-center gap-3 shadow-xl animate-pulse">
@@ -92,117 +123,150 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Hero Carousel */}
+      <div className="relative h-48 md:h-64 rounded-4xl overflow-hidden group shadow-xl">
+        <div 
+          className="absolute inset-0 flex transition-transform duration-700 ease-out" 
+          style={{ transform: `translateX(${-currentSlide * 100}%)`, width: `${slides.length * 100}%` }}
+        >
+          {slides.map((slide: any, idx: number) => (
+            <div key={idx} className="w-full h-full relative">
+              <img 
+                src={slide.image} 
+                className="w-full h-full object-cover" 
+                alt={slide.title} 
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-end p-6">
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: currentSlide === idx ? 0 : 20, opacity: currentSlide === idx ? 1 : 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <h3 className="text-2xl font-black text-white font-display leading-tight">{slide.title}</h3>
+                  <p className="text-white/80 text-sm font-medium mt-1">{slide.subtitle}</p>
+                </motion.div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Carousel Indicators */}
+        <div className="absolute bottom-4 left-6 flex gap-1.5 px-3 py-1.5 bg-black/20 backdrop-blur-md rounded-full border border-white/10">
+          {slides.map((_: any, idx: number) => (
+            <button 
+              key={idx}
+              onClick={() => setCurrentSlide(idx)}
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${currentSlide === idx ? 'bg-primary w-5' : 'bg-white/40 hover:bg-white/60'}`}
+            />
+          ))}
+        </div>
+      </div>
+
       {/* Platform Working Hours Badge */}
       {platformConfig && platformConfig.platformStatus !== 'maintenance' && (
-        <div className={`border rounded-3xl p-4 flex items-center justify-between shadow-sm ${
-          platformConfig.platformStatus === 'busy' ? 'bg-yellow-500/5 border-yellow-500/20' : 
-          platformConfig.platformStatus === 'closed' ? 'bg-red-500/5 border-red-500/20' :
-          'bg-primary/5 border-primary/10'
+        <div className={`border rounded-3xl p-4 flex items-center justify-between shadow-sm transition-all duration-500 ${
+          isActuallyClosed ? 'bg-red-500/5 border-red-500/20 shadow-red-500/5' :
+          platformConfig.platformStatus === 'busy' ? 'bg-yellow-500/5 border-yellow-500/20 shadow-yellow-500/5' : 
+          'bg-green-500/5 border-green-500/20 shadow-green-500/5'
         }`}>
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors duration-500 ${
+              isActuallyClosed ? 'bg-red-500/10 text-red-600' :
               platformConfig.platformStatus === 'busy' ? 'bg-yellow-500/10 text-yellow-600' :
-              platformConfig.platformStatus === 'closed' ? 'bg-red-500/10 text-red-600' :
-              'bg-primary/10 text-primary'
+              'bg-green-500/10 text-green-600'
             }`}>
-              <Clock size={20} />
+              {isActuallyClosed ? <Clock size={20} className="animate-spin-slow" /> : <Clock size={20} />}
             </div>
             <div>
-              <h4 className={`text-xs font-black font-display ${
+              <h4 className={`text-xs font-black font-display transition-colors duration-500 ${
+                isActuallyClosed ? 'text-red-600' :
                 platformConfig.platformStatus === 'busy' ? 'text-yellow-600' :
-                platformConfig.platformStatus === 'closed' ? 'text-red-600' :
-                'text-primary'
+                'text-green-600'
               }`}>
-                {platformConfig.platformStatus === 'busy' ? 'الطلب الآن متاح (ضغط عالي)' : 
-                 platformConfig.platformStatus === 'closed' ? 'نعتذر، المنصة مغلقة حالياً' :
-                 'ساعات عمل المنصة'}
+                {isActuallyClosed ? 'نعتذر، المنصة مغلقة حالياً' :
+                 platformConfig.platformStatus === 'busy' ? 'الطلب متاح (ضغط عالي)' : 
+                 'أهلاً بك! نحن متاحون للخدمة'}
               </h4>
-              <p className="text-[10px] text-text-muted font-bold">
-                من {platformConfig.openingTime} صباحاً حتى {platformConfig.closingTime} مساءً
+              <p className="text-[10px] text-text-muted font-bold font-mono">
+                {platformConfig.openingTime} - {platformConfig.closingTime}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full animate-pulse ${
-              platformConfig.platformStatus === 'busy' ? 'bg-yellow-500' :
-              platformConfig.platformStatus === 'closed' ? 'bg-red-500' :
-              'bg-accent'
-            }`} />
-            <span className={`text-[10px] font-black uppercase tracking-tighter ${
-              platformConfig.platformStatus === 'busy' ? 'text-yellow-600' :
-              platformConfig.platformStatus === 'closed' ? 'text-red-600' :
-              'text-accent'
-            }`}>
-              {platformConfig.platformStatus === 'busy' ? 'مزدحم' : 
-               platformConfig.platformStatus === 'closed' ? 'مغلق' :
-               'جاهزون لخدمتك'}
-            </span>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full shadow-sm ${
+                isActuallyClosed ? 'bg-red-500 shadow-red-500/50' :
+                platformConfig.platformStatus === 'busy' ? 'bg-yellow-500 shadow-yellow-500/50 animate-pulse' :
+                'bg-green-500 shadow-green-500/50 animate-pulse'
+              }`} />
+              <span className={`text-[10px] font-black uppercase tracking-tighter transition-colors duration-500 ${
+                isActuallyClosed ? 'text-red-600' :
+                platformConfig.platformStatus === 'busy' ? 'text-yellow-600' :
+                'text-green-600'
+              }`}>
+                {isActuallyClosed ? 'مغلق' : 
+                 platformConfig.platformStatus === 'busy' ? 'مزدحم' :
+                 'مفتوح الآن'}
+              </span>
+            </div>
+            {isActuallyClosed && (
+              <span className="text-[8px] text-red-500/60 font-bold">يرجى العودة في أوقات الدوام</span>
+            )}
           </div>
         </div>
       )}
 
-      {/* Rolling Food Marquee - Continuous Loop */}
-      {(platformConfig?.marqueeImages?.length > 0 || FOOD_IMAGES.length > 0) && (
-        <div className="relative overflow-hidden py-4 -mx-4 bg-surface/30 border-y border-border/10">
-          <div className="flex w-max animate-marquee">
-            <div className="flex gap-4 px-2 whitespace-nowrap">
-              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
-                <div key={`m1-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
-                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-              ))}
-            </div>
-            {/* Duplicate for seamless loop */}
-            <div className="flex gap-4 px-2 whitespace-nowrap" aria-hidden="true">
-              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
-                <div key={`m2-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
-                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-              ))}
-            </div>
-            {/* Triple for very small sets */}
-            <div className="flex gap-4 px-2 whitespace-nowrap" aria-hidden="true">
-              {(platformConfig?.marqueeImages?.length > 0 ? platformConfig.marqueeImages : FOOD_IMAGES).map((img: string, i: number) => (
-                <div key={`m3-${i}`} className="flex-shrink-0 w-48 h-32 rounded-3xl overflow-hidden border-2 border-white/10 shadow-xl">
-                  <img src={img} alt="Food" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-              ))}
-            </div>
+
+      {/* District Selector & Search */}
+      <div className="flex flex-col gap-4">
+        <div className="relative">
+          <button 
+            className="w-full flex items-center gap-2 text-text font-bold bg-surface px-4 py-3 rounded-2xl border border-border shadow-sm active:scale-95 transition-all"
+            onClick={() => setShowDistricts(!showDistricts)}
+          >
+            <MapPin size={18} className="text-primary" />
+            <span className="font-display flex-1 text-right">{selectedDistrict}</span>
+            <ChevronDown size={14} className={`transition-transform text-text-muted ${showDistricts ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showDistricts && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowDistricts(false)} />
+              <div className="absolute top-full mt-2 w-full bg-surface border border-border rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                {DISTRICTS.map((d) => (
+                  <button
+                    key={d}
+                    className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-primary/5 ${
+                      selectedDistrict === d ? 'text-primary font-bold bg-primary/5' : 'text-text-muted'
+                    }`}
+                    onClick={() => {
+                      setSelectedDistrict(d);
+                      setShowDistricts(false);
+                    }}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="relative group">
+          <input 
+            type="text"
+            placeholder="ابحث عن مطعم، أكلة، أو عرض..."
+            className="w-full bg-surface border border-border p-4 pr-12 rounded-[2rem] text-sm outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 transition-all"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="absolute right-5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors">
+            <Search size={20} />
           </div>
         </div>
-      )}
-
-      {/* District Selector */}
-      <div className="relative">
-        <button 
-          className="flex items-center gap-2 text-text font-bold bg-surface px-4 py-2 rounded-2xl border border-border shadow-sm active:scale-95 transition-all"
-          onClick={() => setShowDistricts(!showDistricts)}
-        >
-          <MapPin size={18} className="text-primary" />
-          <span className="font-display">{selectedDistrict}</span>
-          <ChevronDown size={14} className={`transition-transform text-text-muted ${showDistricts ? 'rotate-180' : ''}`} />
-        </button>
-
-        {showDistricts && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowDistricts(false)} />
-            <div className="absolute top-full mt-2 w-56 bg-surface border border-border rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-              {DISTRICTS.map((d) => (
-                <button
-                  key={d}
-                  className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-primary/5 ${
-                    selectedDistrict === d ? 'text-primary font-bold bg-primary/5' : 'text-text-muted'
-                  }`}
-                  onClick={() => {
-                    setSelectedDistrict(d);
-                    setShowDistricts(false);
-                  }}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          </>
+        {searchQuery && (
+          <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent my-2" />
         )}
       </div>
 
@@ -229,46 +293,77 @@ export default function HomePage() {
           Array(3).fill(0).map((_, i) => (
             <div key={i} className="h-40 bg-surface rounded-3xl animate-pulse border border-border" />
           ))
-        ) : restaurants.length === 0 ? (
-          <div className="text-center py-20 text-text-muted font-medium">لا توجد مطاعم في هذه المنطقة حالياً</div>
+        ) : filteredRestaurants.length === 0 ? (
+          <div className="text-center py-20 text-text-muted font-medium">لا توجد نتائج بحث تطابق طلبك</div>
         ) : (
-          restaurants.map((restaurant) => {
-            const closed = isClosed(restaurant.workingHours);
+          filteredRestaurants.map((restaurant) => {
+            const closed = checkIsClosed(restaurant.workingHours);
+            const hasCustomLogo = restaurant.logo && !restaurant.logo.includes('picsum.photos');
+            
             return (
-              <Link 
-                key={restaurant.id} 
-                to={`/restaurant/${restaurant.id}`}
-                className="relative group block"
-              >
-                <div className={`bg-surface border border-border rounded-[2.5rem] p-4 flex gap-4 transition-all active:scale-[0.98] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/20 ${closed ? 'opacity-60 grayscale' : ''}`}>
-                  <img 
-                    src={restaurant.logo || "https://picsum.photos/seed/food/200/200"} 
-                    alt={restaurant.name}
-                    className="w-24 h-24 rounded-3xl object-cover shadow-inner"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="flex-1 space-y-2 py-1">
-                    <h3 className="font-bold text-lg text-text font-display">{restaurant.name}</h3>
-                    <p className="text-xs text-text-muted">مندي • مشاوي • شعبيات</p>
-                    <div className="flex items-center gap-4 pt-1">
-                      {closed ? (
-                        <span className="status-badge-closed">مغلق</span>
+              <div key={restaurant.id} className="relative group">
+                <Link 
+                  to={`/restaurant/${restaurant.id}`}
+                  className="block"
+                >
+                  <div className={`bg-surface border border-border rounded-[2.5rem] p-4 flex gap-4 transition-all active:scale-[0.98] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/20 ${closed ? 'opacity-60 grayscale' : ''}`}>
+                    <div className="relative w-24 h-24 shrink-0 rounded-3xl overflow-hidden bg-primary/5 border border-border/50">
+                      {!hasCustomLogo && platformConfig?.platformLogo ? (
+                        <img 
+                          src={platformConfig.platformLogo}
+                          alt="Fallback logo"
+                          className="w-full h-full object-contain p-4 opacity-20 filter grayscale"
+                          referrerPolicy="no-referrer"
+                        />
                       ) : (
-                        <span className="status-badge-open">مفتوح الآن</span>
+                        <img 
+                          src={restaurant.logo || "https://picsum.photos/seed/food/200/200"} 
+                          alt={restaurant.name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
                       )}
-                      <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono font-bold">
-                        <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                        <span>{restaurant.rating}</span>
+                    </div>
+                    <div className="flex-1 space-y-2 py-1">
+                      <h3 className="font-bold text-lg text-text font-display">{restaurant.name}</h3>
+                      <p className="text-xs text-text-muted">مندي • مشاوي • شعبيات</p>
+                      <div className="flex items-center gap-4 pt-1">
+                        {closed ? (
+                          <span className="status-badge-closed">مغلق</span>
+                        ) : (
+                          <span className="status-badge-open">مفتوح الآن</span>
+                        )}
+                        <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono font-bold">
+                          <Star size={12} className="text-yellow-500 fill-yellow-500" />
+                          <span>{restaurant.rating}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </Link>
+
+                {/* Favorite Toggle Button */}
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleFavorite(restaurant.id);
+                  }}
+                  className={`absolute top-6 left-6 p-2 rounded-full backdrop-blur-md transition-all active:scale-90 ${
+                    isFavorite(restaurant.id) 
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' 
+                      : 'bg-white/80 dark:bg-black/50 text-text-muted border border-border hover:text-red-500'
+                  }`}
+                >
+                  <Heart size={16} fill={isFavorite(restaurant.id) ? "currentColor" : "none"} />
+                </button>
+
                 {closed && (
-                  <div className="absolute inset-0 bg-background/40 rounded-[2.5rem] flex items-center justify-center backdrop-blur-sm transition-opacity">
+                  <Link to={`/restaurant/${restaurant.id}`} className="absolute inset-0 bg-background/40 rounded-[2.5rem] flex items-center justify-center backdrop-blur-sm transition-opacity">
                     <span className="bg-red-500 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-xl">مغلق مؤقتاً</span>
-                  </div>
+                  </Link>
                 )}
-              </Link>
+              </div>
             );
           })
         )}

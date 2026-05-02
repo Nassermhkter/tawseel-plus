@@ -142,7 +142,7 @@ ${itemsText}
 
     try {
       const orderRef = await addDoc(collection(db, 'orders'), {
-        userId: user.uid,
+        customerId: user.uid,
         restaurantId: restaurant?.id || 'unknown',
         items: items.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
         total,
@@ -252,8 +252,13 @@ ${itemsText}
               <span className="font-bold font-mono text-text">{formatCurrency(total)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-text-muted font-medium">رسوم التوصيل</span>
+              <span className="text-text-muted font-medium">رسوم التوصيل تقريبية</span>
               <span className="font-bold font-mono text-text">{formatCurrency(deliveryFee)}</span>
+            </div>
+            <div className="bg-primary/5 p-3 rounded-2xl border border-primary/20">
+              <p className="text-[10px] text-primary font-bold text-center leading-relaxed">
+                * ملاحظة: يتم تأكيد سعر التوصيل النهائي عبر الواتساب عند مراجعة طلبك من قبل فريقنا.
+              </p>
             </div>
             <div className="h-px bg-border my-1" />
             <div className="flex justify-between text-2xl font-black">
