@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Plus, Store, Utensils, Settings, LayoutGrid, Database, MapPin, Trash2, AlertTriangle, Package, Clock, Bike, Users, FileText, Search } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Restaurant, MenuCategory, Driver } from '../types';
 import { seedDatabase } from '../lib/seed';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
@@ -1310,27 +1311,41 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
                       {config.carouselImages?.map((slide, idx) => (
-                        <div key={idx} className="relative group rounded-2xl overflow-hidden border border-border bg-surface flex h-24">
-                          <div className="w-24 shrink-0 h-full">
-                            <img src={slide.image} alt="" className="w-full h-full object-cover" />
-                          </div>
-                          <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
-                            <p className="font-bold text-xs truncate">{slide.title}</p>
-                            <p className="text-[10px] text-text-muted truncate">{slide.subtitle}</p>
+                        <motion.div 
+                          key={idx} 
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="relative group rounded-3xl overflow-hidden border border-border bg-surface aspect-video shadow-sm hover:shadow-xl transition-all duration-300"
+                        >
+                          <img src={slide.image} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4">
+                            <p className="font-black text-white text-xs truncate leading-tight">{slide.title}</p>
+                            <p className="text-[10px] text-white/70 truncate mt-0.5">{slide.subtitle}</p>
                           </div>
                           <button 
                             type="button"
                             onClick={() => setConfig({...config, carouselImages: config.carouselImages.filter((_, i) => i !== idx)})}
-                            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all hover:bg-red-500 hover:text-white"
+                            className="absolute top-2 left-2 w-8 h-8 rounded-full bg-red-500 text-white shadow-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
                           >
                             <Trash2 size={14} />
                           </button>
-                        </div>
+                          <div className="absolute top-2 right-2 px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg text-[8px] text-white font-bold border border-white/10">
+                            #{idx + 1}
+                          </div>
+                        </motion.div>
                       ))}
                       {(!config.carouselImages || config.carouselImages.length === 0) && (
-                        <p className="md:col-span-2 text-[10px] text-text-muted italic py-4 text-center bg-background border border-dashed border-border rounded-2xl">لا توجد شرائح عرض في Carousel حالياً</p>
+                        <div className="sm:col-span-2 lg:col-span-3 text-center py-12 bg-background border-2 border-dashed border-border rounded-[32px] flex flex-col items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-text-muted">
+                            <LayoutGrid size={24} />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-text uppercase tracking-widest">لا توجد شرائح عرض</p>
+                            <p className="text-[9px] text-text-muted mt-1">ابدأ بإضافة صور جذابة لمقدمة تطبيقك</p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

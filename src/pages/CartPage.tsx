@@ -3,7 +3,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, calculateDeliveryFee, calculateDistance } from '../lib/utils';
-import { Trash2, MapPin, CreditCard, ChevronLeft, CheckCircle2, ChevronRight, Map as MapIcon } from 'lucide-react';
+import { Trash2, MapPin, CreditCard, ChevronLeft, CheckCircle2, ChevronRight, Map as MapIcon, Plus, Minus } from 'lucide-react';
 import { collection, getDocs, doc, getDoc, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Restaurant } from '../types';
@@ -192,12 +192,39 @@ ${itemsText}
         <>
           <div className="space-y-3">
             {items.map(item => (
-              <div key={item.id} className="bg-surface border border-border rounded-3xl flex justify-between p-4 shadow-sm">
-                <div className="flex gap-4 items-center">
-                  <span className="bg-primary/10 text-primary w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black border border-primary/20">{item.quantity}</span>
-                  <span className="font-bold text-text font-display">{item.name}</span>
+              <div key={item.id} className="bg-surface border border-border rounded-3xl flex flex-col p-4 shadow-sm gap-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-text font-display">{item.name}</span>
+                    <span className="text-[10px] text-text-muted font-mono">{formatCurrency(item.price)} لكل وحدة</span>
+                  </div>
+                  <span className="text-primary font-black font-mono">{formatCurrency(item.price * item.quantity)}</span>
                 </div>
-                <span className="text-primary font-black font-mono">{formatCurrency(item.price * item.quantity)}</span>
+                
+                <div className="flex items-center justify-between border-t border-border/50 pt-3">
+                  <div className="flex items-center gap-3 bg-background rounded-2xl p-1 border border-border">
+                    <button 
+                      onClick={() => updateQuantity(item.id, -1)}
+                      className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-text-muted hover:text-red-500 transition-colors"
+                    >
+                      {item.quantity === 1 ? <Trash2 size={16} /> : <Minus size={16} />}
+                    </button>
+                    <span className="w-8 text-center font-black text-sm">{item.quantity}</span>
+                    <button 
+                      onClick={() => updateQuantity(item.id, 1)}
+                      className="w-10 h-10 rounded-xl bg-primary text-black flex items-center justify-center hover:brightness-110 transition-all"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  
+                  <button 
+                    onClick={() => updateQuantity(item.id, -item.quantity)}
+                    className="text-[10px] text-red-500 font-bold hover:underline"
+                  >
+                    إزالة الكل
+                  </button>
+                </div>
               </div>
             ))}
           </div>
